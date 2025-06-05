@@ -1,0 +1,4 @@
+*.exe
+libs/
+.vscode/
+to-do.txt
