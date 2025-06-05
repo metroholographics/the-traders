@@ -1,48 +1,31 @@
 #include "raylib.h"
 #include <stdio.h>
 #include <stdbool.h>
-
-#define WIDTH 320
-#define HEIGHT 240
-#define SCALE 4
-#define G_WIDTH WIDTH * SCALE
-#define G_HEIGHT HEIGHT * SCALE
-
-#define ROWS 12
-#define COLS 16
-#define TILE_WIDTH WIDTH / COLS
-#define TILE_HEIGHT HEIGHT / ROWS
-
-#define NUM_MAPS 1
-
-typedef enum {
-    EMPTY,
-    PLAYER,
-    NUM_ENTITY_TYPES
-} Entity_Type; 
-
-typedef struct entity {
-    int pos[2];
-    Entity_Type type;
-    bool walkable;
-} Entity;
-
-typedef struct tile {
-    Entity entity;
-} Tile;
-
-typedef struct map {
-    Tile tiles[COLS][ROWS];
-    int biome;
-} Map;
-
-typedef struct game_state {
-    Entity player;
-    Map maps[NUM_MAPS];
-    Texture2D images[NUM_ENTITY_TYPES];
-} GameState;
+#include "main.h"
 
 GameState game;
+Entity entities[NUM_ENTITY_TYPES];
+
+void create_entities(Entity* e)
+{
+    e[EMPTY] = (Entity) {
+        .pos = {0,0},
+        .type = EMPTY,
+        .walkable = true
+    };
+
+    e[PLAYER] = (Entity) {
+        .pos = {0,0},
+        .type = PLAYER,
+        .walkable = false
+    };
+
+    e[TREE] = (Entity) {
+        .pos = {0,0},
+        .type = TREE,
+        .walkable = false
+    };
+}
 
 Map empty_map(void)
 {
@@ -50,13 +33,9 @@ Map empty_map(void)
 
     for (int y = 0; y < ROWS; y++) {
         for (int x = 0; x < COLS; x++) {
-            result.tiles[x][y] = (Tile) {
-                .entity = (Entity) {
-                    .pos = {x, y},
-                    .type = EMPTY,
-                    .walkable = true
-                }
-            };
+            result.tiles[x][y].entity = entities[EMPTY]; 
+            result.tiles[x][y].entity.pos[0] = x;
+            result.tiles[x][y].entity.pos[1] = y;
             result.biome = 0;
         }
     }
@@ -65,13 +44,11 @@ Map empty_map(void)
 
 void reset_game(GameState* g)
 {
-    g->player = (Entity) {
-        .pos = {5, 5},
-        .type = PLAYER,
-        .walkable = false
-    };
-    g->maps[0] = empty_map();
+    g->player = entities[PLAYER];
+    g->player.pos[0] = 5;
+    g->player.pos[1] = 5;
 
+    g->maps[0] = empty_map();
 }
 
 int main (int argc, char *argv[])
@@ -84,16 +61,22 @@ int main (int argc, char *argv[])
     RenderTexture2D screen = LoadRenderTexture(WIDTH, HEIGHT);
     SetTextureFilter(screen.texture, TEXTURE_FILTER_POINT);
 
-    reset_game(&game);
+    create_entities(entities);
 
-    bool screen_change = true;
+    reset_game(&game);
 
     while (!WindowShouldClose()) {
 
         if (IsKeyPressed(KEY_RIGHT)) {
             game.player.pos[0] += 1;
-
+        } else if (IsKeyPressed(KEY_LEFT)) {
+            game.player.pos[0] -= 1;
+        } else if (IsKeyPressed(KEY_UP)) {
+            game.player.pos[1] -= 1;
+        } else if (IsKeyPressed(KEY_DOWN)) {
+            game.player.pos[1] += 1;
         }
+        
 
     //Drawing to 320x240 render texture
         BeginTextureMode(screen);
