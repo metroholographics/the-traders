@@ -11,20 +11,35 @@ void create_entities(Entity* e)
     e[EMPTY] = (Entity) {
         .pos = {-1,-1},
         .type = EMPTY,
-        .walkable = true
+        .walkable = true,
+        .interactable = false,
+        .action = NO_ACTION,
     };
 
     e[PLAYER] = (Entity) {
         .pos = {0,0},
         .type = PLAYER,
-        .walkable = false
+        .walkable = false,
+        .interactable = false,
+        .action = NO_ACTION,
     };
 
     e[TREE] = (Entity) {
         .pos = {0,0},
         .type = TREE,
-        .walkable = false
+        .walkable = false,
+        .interactable = true,
+        .action = CUT,
     };
+}
+
+Tile create_tile(Entity current, Entity previous, int x, int y)
+{
+    Entity c = current;
+    Entity p = previous;
+    c.pos[0] = p.pos[0] =  x;
+    c.pos[1] = p.pos[1] = y;
+    return (Tile) {.entity = c, .previous = p};
 }
 
 Map empty_map(void)
@@ -33,10 +48,9 @@ Map empty_map(void)
 
     for (int y = 0; y < ROWS; y++) {
         for (int x = 0; x < COLS; x++) {
-            result.tiles[x][y].entity = entities[EMPTY]; 
-            result.tiles[x][y].entity.pos[0] = x;
-            result.tiles[x][y].entity.pos[1] = y;
+            result.tiles[x][y] = create_tile(entities[EMPTY], entities[EMPTY], x, y);
             result.biome = 0;
+            
         }
     }
     return result;
@@ -51,10 +65,7 @@ void reset_game(GameState* g)
     g->maps[0] = empty_map();
 
     Entity test_tree = entities[TREE];
-    test_tree.pos[0] = 10;
-    test_tree.pos[1] = 8;
-
-    g->maps[0].tiles[10][8].entity = test_tree;
+    g->maps[0].tiles[10][8] = create_tile(test_tree, test_tree, 10, 8);
     g->selected_tile = NULL;
 
 }
@@ -68,10 +79,26 @@ Vector2 screen_to_world(int x, int y)
 
 void handle_input(Entity* p)
 {
+
+    //Mouse-Handling
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        Tile* selected = get_selected_tile(&game.maps[0]);
+        if (game.selected_tile == selected) {
+            register_action(&game.player, game.selected_tile);
+            printf("already selected\n");
+        } else {
+            game.selected_tile = selected;
+        }
+        printf("%d, %d\n", selected->entity.pos[0], selected->entity.pos[1]);  
+    } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+        if (game.selected_tile != NULL) {
+            game.selected_tile = NULL;
+        }
+    }
+        //Keyboard-handling
     int new_x = p->pos[0];
     int new_y = p->pos[1];
-
-    //Keyboard-handling
+    
     KeyboardKey key_pressed = GetKeyPressed();
     switch (key_pressed) {
         case KEY_RIGHT:
@@ -94,32 +121,44 @@ void handle_input(Entity* p)
             break;
     }
 
-    //Mouse-Handling
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        int mouse_x = GetMouseX();
-        int mouse_y = GetMouseY();
-        Vector2 mouse_world = screen_to_world(mouse_x, mouse_y);
-        int tile_x = mouse_world.x / TILE_WIDTH;
-        int tile_y = mouse_world.y / TILE_HEIGHT;
-        Tile* selected = &game.maps[0].tiles[tile_x][tile_y];
-        game.selected_tile = selected;
-        
-        printf("%d, %d\n", tile_x, tile_y);  
-    } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
-        if (game.selected_tile != NULL) {
-            game.selected_tile = NULL;
-        }
-    }
-
+    //::TO_DO: make the collision check a function, handle all movement AFTER action
     if (new_x < 0 || new_x >= COLS || new_y < 0 || new_y >= ROWS) goto function_end;
 
     Entity target = game.maps[0].tiles[new_x][new_y].entity;
     if (target.walkable) {
         p->pos[0] = new_x;
         p->pos[1] = new_y;
+    } else {
+        printf("not walkable\n");
     }
 
     function_end:
+}
+
+void register_action(Entity* p, Tile* target)
+{
+    if(!target->entity.interactable) return;
+
+    switch(target->entity.action) {
+        case NO_ACTION:
+            break;
+        case CUT:
+            p->action = CUT;
+            break;
+        default:
+            break;
+    }
+}
+
+Tile* get_selected_tile(Map* m)
+{
+    int mouse_x = GetMouseX();
+    int mouse_y = GetMouseY();
+    Vector2 mouse_world = screen_to_world(mouse_x, mouse_y);
+    int tile_x = mouse_world.x / TILE_WIDTH;
+    int tile_y = mouse_world.y / TILE_HEIGHT;
+
+    return &m->tiles[tile_x][tile_y];
 }
 
 void update_game(GameState* g)
@@ -139,16 +178,10 @@ int main (int argc, char *argv[])
     SetTextureFilter(screen.texture, TEXTURE_FILTER_POINT);
 
     create_entities(entities);
-
     reset_game(&game);
 
     while (!WindowShouldClose()) {
-
         update_game(&game);
-
-
-        
-
     //Drawing to 320x240 render texture
         BeginTextureMode(screen);
             ClearBackground(BLACK);
@@ -168,6 +201,7 @@ int main (int argc, char *argv[])
                     }
                 }
             }
+            
             Entity p = game.player;
             DrawRectangle(p.pos[0] * TILE_WIDTH, p.pos[1] * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, DARKGREEN);
 

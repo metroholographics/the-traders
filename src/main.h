@@ -21,16 +21,25 @@ typedef enum {
     PLAYER,
     TREE,
     NUM_ENTITY_TYPES
-} Entity_Type; 
+} Entity_Type;
 
-typedef struct entity {
+typedef enum {
+    NO_ACTION,
+    CUT,
+    NUM_ACTIONS
+} Action;
+
+typedef struct Entity {
     int pos[2];
     Entity_Type type;
     bool walkable;
+    bool interactable;
+    Action action;
 } Entity;
 
 typedef struct tile {
     Entity entity;
+    Entity previous;
 } Tile;
 
 typedef struct map {
@@ -51,6 +60,9 @@ void create_entities(Entity* e);
 void update_game(GameState* g);
 void handle_input(Entity* p);
 Vector2 screen_to_world(int x, int y);
+Tile create_tile(Entity current, Entity previous, int x, int y);
+Tile* get_selected_tile(Map* m);
+void register_action(Entity* p, Tile* target);
 
 
 #endif
