@@ -29,12 +29,19 @@ typedef enum {
     NUM_ACTIONS
 } Action;
 
+typedef struct Timer {
+    float time;
+} Timer;
+
 typedef struct Entity {
     int pos[2];
     Entity_Type type;
     bool walkable;
     bool interactable;
     Action action;
+    struct Entity* target;
+    int health;
+    Timer timer;
 } Entity;
 
 typedef struct tile {
@@ -63,6 +70,9 @@ Vector2 screen_to_world(int x, int y);
 Tile create_tile(Entity current, Entity previous, int x, int y);
 Tile* get_selected_tile(Map* m);
 void register_action(Entity* p, Tile* target);
+bool tile_in_bounds(int x, int y);
+void handle_action(Entity* p);
+void cut_target(Entity* p, Entity* t);
 
 
 #endif

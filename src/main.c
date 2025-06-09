@@ -8,6 +8,7 @@ Entity entities[NUM_ENTITY_TYPES];
 
 void create_entities(Entity* e)
 {
+    e[EMPTY] = (Entity) {0};
     e[EMPTY] = (Entity) {
         .pos = {-1,-1},
         .type = EMPTY,
@@ -15,21 +16,20 @@ void create_entities(Entity* e)
         .interactable = false,
         .action = NO_ACTION,
     };
-
+    e[PLAYER] = (Entity){0};
     e[PLAYER] = (Entity) {
-        .pos = {0,0},
         .type = PLAYER,
         .walkable = false,
         .interactable = false,
         .action = NO_ACTION,
     };
-
+    e[TREE] = (Entity){0};
     e[TREE] = (Entity) {
-        .pos = {0,0},
         .type = TREE,
         .walkable = false,
         .interactable = true,
         .action = CUT,
+        .health = 100
     };
 }
 
@@ -79,7 +79,6 @@ Vector2 screen_to_world(int x, int y)
 
 void handle_input(Entity* p)
 {
-
     //Mouse-Handling
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         Tile* selected = get_selected_tile(&game.maps[0]);
@@ -121,32 +120,15 @@ void handle_input(Entity* p)
             break;
     }
 
-    //::TO_DO: make the collision check a function, handle all movement AFTER action
-    if (new_x < 0 || new_x >= COLS || new_y < 0 || new_y >= ROWS) goto function_end;
-
-    Entity target = game.maps[0].tiles[new_x][new_y].entity;
-    if (target.walkable) {
-        p->pos[0] = new_x;
-        p->pos[1] = new_y;
-    } else {
-        printf("not walkable\n");
-    }
-
-    function_end:
-}
-
-void register_action(Entity* p, Tile* target)
-{
-    if(!target->entity.interactable) return;
-
-    switch(target->entity.action) {
-        case NO_ACTION:
-            break;
-        case CUT:
-            p->action = CUT;
-            break;
-        default:
-            break;
+    if (tile_in_bounds(new_x, new_y)) {
+        Entity target = game.maps[0].tiles[new_x][new_y].entity;
+        if (target.walkable) {
+            p->pos[0] = new_x;
+            p->pos[1] = new_y;
+            //p->action = NO_ACTION;
+        } else {
+            printf("not walkable\n");
+        }
     }
 }
 
@@ -161,8 +143,66 @@ Tile* get_selected_tile(Map* m)
     return &m->tiles[tile_x][tile_y];
 }
 
+bool tile_in_bounds(int x, int y)
+{
+    return (x >= 0 && x < COLS && y >= 0 && y < ROWS);
+}
+
+void register_action(Entity* p, Tile* target)
+{
+    if (!target->entity.interactable) return;
+
+    switch(target->entity.action) {
+        case NO_ACTION:
+            break;
+        case CUT:
+            p->action = CUT;
+            p->target = &target->entity;
+            printf("For Cut: %p\n", &target->entity);
+            break;
+        default:
+            break;
+    }
+}
+
+void handle_action(Entity* p)
+{
+    Action action = p->action;
+    if (action == NO_ACTION) {
+        printf("no action\n");
+        return;
+    }
+    switch (action) {
+        case CUT:
+            printf("To Cut: %p ", p->target); 
+            cut_target(p, p->target);
+            //printf("To Cut: %p\n", p->target);
+            break;
+        default:
+            break;
+    }
+}
+
+void cut_target(Entity* p, Entity* t)
+{
+    printf("Cutting %p: \n", t);
+    float current_time = p->timer.time;
+    if (current_time > 0.5f) p->timer.time = current_time = 0.0f;
+    if (current_time == 0.0f) {
+        t->health -= 30;
+    }
+    p->timer.time += GetFrameTime();
+
+    if (t->health <= 0) {
+        t->health = 100;
+        p->action = NO_ACTION;
+    }
+}
+
+
 void update_game(GameState* g)
 {
+    handle_action(&g->player);
     handle_input(&g->player);
 
 }
@@ -194,7 +234,9 @@ int main (int argc, char *argv[])
                             DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, BLACK);
                             break;
                         case TREE:
-                            DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, BROWN);
+                            printf("%d\n", m_entity.entity.health);
+                            float height_factor = m_entity.entity.health / 100.0f; 
+                            DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, height_factor * TILE_HEIGHT, BROWN);
                             break;
                         default:
                             DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, BLACK);
