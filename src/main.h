@@ -4,8 +4,8 @@
 #define WIDTH 320
 #define HEIGHT 240
 #define SCALE 4
-#define G_WIDTH WIDTH * SCALE
-#define G_HEIGHT HEIGHT * SCALE
+#define G_WIDTH (WIDTH * SCALE)
+#define G_HEIGHT (HEIGHT * SCALE)
 
 #define ROWS 12
 #define COLS 16
@@ -37,7 +37,6 @@ typedef struct Entity {
     int pos[2];
     Entity_Type type;
     bool walkable;
-    bool interactable;
     Action action;
     struct Entity* target;
     int health;

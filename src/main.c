@@ -13,21 +13,18 @@ void create_entities(Entity* e)
         .pos = {-1,-1},
         .type = EMPTY,
         .walkable = true,
-        .interactable = false,
         .action = NO_ACTION,
     };
     e[PLAYER] = (Entity){0};
     e[PLAYER] = (Entity) {
         .type = PLAYER,
         .walkable = false,
-        .interactable = false,
         .action = NO_ACTION,
     };
     e[TREE] = (Entity){0};
     e[TREE] = (Entity) {
         .type = TREE,
         .walkable = false,
-        .interactable = true,
         .action = CUT,
         .health = 100
     };
@@ -94,7 +91,7 @@ void handle_input(Entity* p)
             game.selected_tile = NULL;
         }
     }
-        //Keyboard-handling
+    //Keyboard-handling
     int new_x = p->pos[0];
     int new_y = p->pos[1];
     
@@ -102,18 +99,22 @@ void handle_input(Entity* p)
     switch (key_pressed) {
         case KEY_RIGHT:
         case KEY_D:
+            p->action = NO_ACTION;
             new_x += 1;
             break;
         case KEY_LEFT:
         case KEY_A:
+            p->action = NO_ACTION;
             new_x -= 1;
             break;
         case KEY_UP:
         case KEY_W:
+            p->action = NO_ACTION;
             new_y -= 1;
             break;
         case KEY_DOWN:
         case KEY_S:
+            p->action = NO_ACTION;
             new_y += 1;
             break;
         default:
@@ -125,7 +126,6 @@ void handle_input(Entity* p)
         if (target.walkable) {
             p->pos[0] = new_x;
             p->pos[1] = new_y;
-            //p->action = NO_ACTION;
         } else {
             printf("not walkable\n");
         }
@@ -141,6 +141,7 @@ Tile* get_selected_tile(Map* m)
     int tile_y = mouse_world.y / TILE_HEIGHT;
 
     return &m->tiles[tile_x][tile_y];
+    return &m->tiles[tile_x][tile_y];
 }
 
 bool tile_in_bounds(int x, int y)
@@ -150,15 +151,13 @@ bool tile_in_bounds(int x, int y)
 
 void register_action(Entity* p, Tile* target)
 {
-    if (!target->entity.interactable) return;
-
     switch(target->entity.action) {
         case NO_ACTION:
+            p->action = NO_ACTION;
             break;
         case CUT:
             p->action = CUT;
             p->target = &target->entity;
-            printf("For Cut: %p\n", &target->entity);
             break;
         default:
             break;
@@ -169,14 +168,11 @@ void handle_action(Entity* p)
 {
     Action action = p->action;
     if (action == NO_ACTION) {
-        printf("no action\n");
         return;
     }
     switch (action) {
         case CUT:
-            printf("To Cut: %p ", p->target); 
             cut_target(p, p->target);
-            //printf("To Cut: %p\n", p->target);
             break;
         default:
             break;
@@ -185,7 +181,6 @@ void handle_action(Entity* p)
 
 void cut_target(Entity* p, Entity* t)
 {
-    printf("Cutting %p: \n", t);
     float current_time = p->timer.time;
     if (current_time > 0.5f) p->timer.time = current_time = 0.0f;
     if (current_time == 0.0f) {
@@ -227,14 +222,13 @@ int main (int argc, char *argv[])
             ClearBackground(BLACK);
             for (int i = 0; i < ROWS; i++) {
                 for (int j = 0; j < COLS; j++) {
-                    Map m = game.maps[0];
+                    Map m = game.maps[0]; 
                     Tile m_entity = m.tiles[j][i];
                     switch (m_entity.entity.type) {
                         case EMPTY:
                             DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, BLACK);
                             break;
                         case TREE:
-                            printf("%d\n", m_entity.entity.health);
                             float height_factor = m_entity.entity.health / 100.0f; 
                             DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, height_factor * TILE_HEIGHT, BROWN);
                             break;
