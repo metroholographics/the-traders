@@ -43,6 +43,8 @@ typedef struct Entity {
     Action action;
     struct Entity* target;
     int health;
+    float action_rate;
+    int growth_per_tick;
     Timer timer;
 } Entity;
 
@@ -62,11 +64,17 @@ typedef struct map {
     int biome;
 } Map;
 
+typedef struct player_stats {
+    int woodcut_dmg;
+} Player_Stats;
+
 typedef struct game_state {
     Entity player;
+    Player_Stats stats;
     Tile* selected_tile;
     Map maps[NUM_MAPS];
     Texture2D images[NUM_ENTITY_TYPES];
+    Map* current_map;
     bool debug_mode;
 } GameState;
 

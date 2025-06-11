@@ -3,7 +3,26 @@
 - Player action system
 
 - Entity action system
-
+    - Entity has a default action that either it does, or the player does to it. This may become a problem, but keeps scope tiny.
+    - The rate which modifys how often the default 'action' happens is defined by .action_rate.
+        E.g., for Cut, this is how many seconds it takes for the player to make a cut. For Growth, this is the seconds for it to grow an amount.
+        You just kind of have to know what you'll use this .action_rate for in each case.
+    - Every game update, the entity action queue is fulfilled.
+        - The entity action queue is stored on the current map. It has enough space for each tile on the map
+        - Entities are pushed onto the queue throughout the update loop. The default action is performed.
+            - The idea is entities which act on their own accord (e.g., stump growing) get pushed to the action queue as neeeded.
+            - The player can trigger an entity's action to be pushed onto the queue.
+        
+- Map system
+    - 
 - Tile system
+    - Tiles store references to their .current entity and .previous entity . 
+        - For environmental objects which have 2 states (e.g., Tree and Stump), these can be thought of as the 2 possible states
+            - This means when one state ends, the .current and .previous entity can swap.
+        - Note, these aren't pointers - they are references to what entity is on the tile.
+    - When you interact with an entity, you must interact with a pointer to the entity accessed from the tile
+        - e.g., some Tile* t, t->target.
+    - Tiles are stored in a 2D array on a Map. I guess the memory for each tile is allocated when the map is allocted
 
 - Adding entities
+

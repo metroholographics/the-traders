@@ -64,14 +64,17 @@ void create_entities(Entity* e)
         .type = TREE,
         .walkable = false,
         .action = CUT,
-        .health = 100
+        .health = 100,
+        .action_rate = 0.5f
     };
     e[STUMP] = (Entity){0};
-    e[STUMP] = (Entity){
+    e[STUMP] = (Entity) {
         .type = STUMP,
         .walkable = false,
         .action = GROW,
-        .health = 0
+        .health = 0,
+        .action_rate = 1.0f,
+        .growth_per_tick = 30,
     }; 
 }
 
@@ -90,12 +93,18 @@ void reset_game(GameState* g)
     g->player.pos[0] = 5;
     g->player.pos[1] = 5;
 
-    g->maps[0] = empty_map();
+    g->stats = (Player_Stats) {
+        .woodcut_dmg = 30
+    };
 
-    g->maps[0].tiles[10][8] = create_tile(TREE, STUMP, 10, 8);
-    g->maps[0].tiles[11][8] = create_tile(TREE, STUMP, 11, 8);
+    g->maps[0] = empty_map();
+    g->current_map = &g->maps[0];
+
+    g->current_map->tiles[10][8] = create_tile(TREE, STUMP, 10, 8);
+    g->current_map->tiles[11][8] = create_tile(TREE, STUMP, 11, 8);
     g->selected_tile = NULL;
     g->debug_mode = false;
+    
 
 }
 
@@ -103,7 +112,7 @@ void handle_input(Entity* p)
 {
     //Mouse-Handling
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        Tile* selected = get_selected_tile(&game.maps[0]);
+        Tile* selected = get_selected_tile(game.current_map);
         if (game.selected_tile == selected) {
             register_action(p, game.selected_tile);
         } else {
@@ -145,7 +154,7 @@ void handle_input(Entity* p)
     }
 
     if (tile_in_bounds(new_x, new_y)) {
-        Entity target = game.maps[0].tiles[new_x][new_y].entity;
+        Entity target = game.current_map->tiles[new_x][new_y].entity;
         if (target.walkable) {
             p->pos[0] = new_x;
             p->pos[1] = new_y;
@@ -171,9 +180,8 @@ void register_action(Entity* p, Tile* target)
 void handle_action(Entity* p)
 {
     Action action = p->action;
-    if (action == NO_ACTION) {
-        return;
-    }
+    if (action == NO_ACTION) return;
+
     switch (action) {
         case CUT:
             cut_target(p, p->target);
@@ -186,22 +194,22 @@ void handle_action(Entity* p)
 void cut_target(Entity* p, Entity* t)
 {
     float current_time = p->timer.time;
-    if (current_time > 0.5f) p->timer.time = current_time = 0.0f;
+    if (current_time > t->action_rate) p->timer.time = current_time = 0.0f;
     if (current_time == 0.0f) {
-        t->health -= 30;
+        t->health -= game.stats.woodcut_dmg;
     }
     p->timer.time += GetFrameTime();
 
     if (t->health <= 0) {
         int tile_x = t->pos[0];
         int tile_y = t->pos[1];
-        Tile* t = &game.maps[0].tiles[tile_x][tile_y];
+        Tile* t = &game.current_map->tiles[tile_x][tile_y];
         *t = create_tile(
             t->previous.type,
             t->entity.type,
             tile_x, tile_y
         );
-        add_to_map_queue(&game.maps[0], tile_x, tile_y);
+        add_to_map_queue(game.current_map, tile_x, tile_y);
         p->action = NO_ACTION; 
         p->target = NULL; 
     }
@@ -217,6 +225,7 @@ void add_to_map_queue(Map* m, int x, int y)
             break;
         }
     }
+    //::todo: check if queue is full, increase capacity and recall function to add entity if so
 }
 
 void handle_map_queue(Map* m, Entity_Queue* eq)
@@ -237,16 +246,16 @@ void handle_map_queue(Map* m, Entity_Queue* eq)
 void grow_stump(Map* m, Entity* e, int index)
 {
     e->timer.time += GetFrameTime();
-    if (e->timer.time < 1.0f) return;
+    if (e->timer.time < e->action_rate) return;
 
     e->timer.time = 0.0f; // Reset timer
     if (e->health < 100) {
-        e->health += 30;
+        e->health += e->growth_per_tick;
     } else {
         int x = e->pos[0];
         int y = e->pos[1];
         Tile* t = &m->tiles[x][y];
-        m->tiles[x][y] = create_tile(t->previous.type, t->entity.type, x, y);
+        *t = create_tile(t->previous.type, t->entity.type, x, y);
         m->entity_queue.queue[index] = NULL; // Remove from queue
         m->entity_queue.count--;
     }
@@ -257,7 +266,7 @@ void update_game(GameState* g)
 {
     if (g->debug_mode) {
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            Tile* selected = get_selected_tile(&g->maps[0]);
+            Tile* selected = get_selected_tile(g->current_map);
             Entity selected_entity = selected->entity;
             printf("Type: %d ", selected_entity.type);
             printf("Pos: %d, %d\n",selected_entity.pos[0], selected_entity.pos[1]);
@@ -267,7 +276,7 @@ void update_game(GameState* g)
     }
     handle_action(&g->player);
     handle_input(&g->player);
-    handle_map_queue(&g->maps[0], &g->maps[0].entity_queue);
+    handle_map_queue(g->current_map, &g->current_map->entity_queue);
 
 }
 
