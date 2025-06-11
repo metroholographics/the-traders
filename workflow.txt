@@ -1,0 +1,9 @@
+~~Important code design notes~~
+
+- Player action system
+
+- Entity action system
+
+- Tile system
+
+- Adding entities

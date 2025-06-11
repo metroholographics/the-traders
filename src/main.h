@@ -15,17 +15,20 @@
 #define HALF_TILE_HEIGHT (TILE_HEIGHT * 0.5f)
 
 #define NUM_MAPS 1
+#define MAP_ENTITY_NUM (ROWS * COLS)
 
 typedef enum {
-    EMPTY,
+    EMPTY = 0,
     PLAYER,
     TREE,
+    STUMP,
     NUM_ENTITY_TYPES
 } Entity_Type;
 
 typedef enum {
-    NO_ACTION,
+    NO_ACTION = 0,
     CUT,
+    GROW,
     NUM_ACTIONS
 } Action;
 
@@ -43,6 +46,11 @@ typedef struct Entity {
     Timer timer;
 } Entity;
 
+typedef struct EntityQueue {
+    Entity* queue[MAP_ENTITY_NUM];
+    int count;
+} Entity_Queue;
+
 typedef struct tile {
     Entity entity;
     Entity previous;
@@ -50,6 +58,7 @@ typedef struct tile {
 
 typedef struct map {
     Tile tiles[COLS][ROWS];
+    Entity_Queue entity_queue;
     int biome;
 } Map;
 
@@ -58,6 +67,7 @@ typedef struct game_state {
     Tile* selected_tile;
     Map maps[NUM_MAPS];
     Texture2D images[NUM_ENTITY_TYPES];
+    bool debug_mode;
 } GameState;
 
 Map empty_map(void);
@@ -66,12 +76,15 @@ void create_entities(Entity* e);
 void update_game(GameState* g);
 void handle_input(Entity* p);
 Vector2 screen_to_world(int x, int y);
-Tile create_tile(Entity current, Entity previous, int x, int y);
+Tile create_tile(Entity_Type current, Entity_Type previous, int x, int y);
 Tile* get_selected_tile(Map* m);
 void register_action(Entity* p, Tile* target);
 bool tile_in_bounds(int x, int y);
 void handle_action(Entity* p);
 void cut_target(Entity* p, Entity* t);
+void add_to_map_queue(Map* m, int x, int y);
+void handle_map_queue(Map* m, Entity_Queue* eq);
+void grow_stump(Map* m, Entity* e, int index);
 
 
 #endif
