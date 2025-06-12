@@ -23,6 +23,7 @@ typedef enum {
     PLAYER,
     TREE,
     STUMP,
+    GRASS,
     NUM_ENTITY_TYPES
 } Entity_Type;
 

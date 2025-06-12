@@ -102,6 +102,8 @@ void reset_game(GameState* g)
 
     g->current_map->tiles[10][8] = create_tile(TREE, STUMP, 10, 8);
     g->current_map->tiles[11][8] = create_tile(TREE, STUMP, 11, 8);
+    g->current_map->tiles[10][5] = create_tile(TREE, STUMP, 10, 5);
+    g->current_map->tiles[11][7] = create_tile(TREE, STUMP, 11, 7);
     g->selected_tile = NULL;
     g->debug_mode = false;
     
@@ -310,6 +312,7 @@ void load_sprite_sources(GameState* g)
     src_array[PLAYER] = (Rectangle) {.x =  0.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
     src_array[TREE]   = (Rectangle) {.x = 32.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
     src_array[STUMP]  = (Rectangle) {.x = 64.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    src_array[GRASS]  = (Rectangle) {.x = 96.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
 
 }
 
@@ -319,7 +322,7 @@ int main (int argc, char *argv[])
 
     InitWindow(G_WIDTH, G_HEIGHT, "the traders");
     SetTargetFPS(60);
-    
+
     RenderTexture2D screen = LoadRenderTexture(WIDTH, HEIGHT);
     SetTextureFilter(screen.texture, TEXTURE_FILTER_POINT);
 
@@ -346,16 +349,22 @@ int main (int argc, char *argv[])
                     //DrawRectangleLines(dest.x, dest.y, dest.width, dest.height, RED);
                     switch (m_entity.entity.type) {
                         case EMPTY:
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
                             //DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, BLACK);
                             break;
                         case TREE: {
                             float height_factor = m_entity.entity.health / 100.0f;
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[TREE], dest, dest_vec, 0.0f, WHITE);
+                            float chop = 1.0f - height_factor;
+                            Rectangle source = game.sprites.source[TREE];
+                            source.y = source.y + (chop * SPRITE_SIZE);
+                            source.height =  height_factor * SPRITE_SIZE;
+                            dest.y = ((float) i * TILE_HEIGHT) + (chop * TILE_WIDTH);
+                            dest.height = height_factor * TILE_HEIGHT;
+                            DrawTexturePro(game.sprites.spritesheet, source, dest, dest_vec, 0.0f, WHITE);
                         }
                             break;
                         case STUMP: {
-                            float height_factor = m_entity.entity.health / 100.0f;
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[STUMP], dest, dest_vec, 0.0f, WHITE); 
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[STUMP], dest, dest_vec, 0.0f, WHITE);
                         }
                             break;
                         default:
