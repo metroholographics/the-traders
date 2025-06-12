@@ -168,9 +168,12 @@ void register_action(Entity* p, Tile* target)
         case NO_ACTION:
             p->action = NO_ACTION;
             break;
-        case CUT:
-            p->action = CUT;
-            p->target = &target->entity;
+        case CUT: {
+            if (entities_adjacent(*p, target->entity)) {
+                p->action = CUT;
+                p->target = &target->entity;
+            }
+        }
             break;
         default:
             break;
@@ -183,12 +186,33 @@ void handle_action(Entity* p)
     if (action == NO_ACTION) return;
 
     switch (action) {
-        case CUT:
-            cut_target(p, p->target);
+        case CUT: {
+                cut_target(p, p->target);
+            } 
             break;
         default:
             break;
     }
+}
+
+bool entities_adjacent(Entity e, Entity target)
+{
+    int e_x = e.pos[0];
+    int e_y = e.pos[1];
+    int target_x = target.pos[0];
+    int target_y = target.pos[1];
+    bool x_adjacent, y_adjacent;
+    x_adjacent = y_adjacent = false;
+
+    if (e_x + 1 == target_x || e_x - 1 == target_x || e_x == target_x) {
+        x_adjacent = true;
+    }
+
+    if (e_y + 1 == target_y || e_y - 1 == target_y || e_y == target_y) {
+        y_adjacent = true;
+    }
+
+    return (x_adjacent && y_adjacent);
 }
 
 void cut_target(Entity* p, Entity* t)
@@ -225,7 +249,7 @@ void add_to_map_queue(Map* m, int x, int y)
             break;
         }
     }
-    //::todo: check if queue is full, increase capacity and recall function to add entity if so
+    //::todo: check if queue is full, increase capacity and re-call function to add entity if so
 }
 
 void handle_map_queue(Map* m, Entity_Queue* eq)
@@ -261,7 +285,6 @@ void grow_stump(Map* m, Entity* e, int index)
     }
 }
 
-
 void update_game(GameState* g)
 {
     if (g->debug_mode) {
@@ -280,18 +303,31 @@ void update_game(GameState* g)
 
 }
 
+void load_sprite_sources(GameState* g)
+{
+    Rectangle* src_array = g->sprites.source;
+    src_array[EMPTY]  = (Rectangle) {0,0,0,0};
+    src_array[PLAYER] = (Rectangle) {.x =  0.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    src_array[TREE]   = (Rectangle) {.x = 32.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    src_array[STUMP]  = (Rectangle) {.x = 64.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+
+}
+
 int main (int argc, char *argv[])
 {
     (void)argc; (void)argv;
 
     InitWindow(G_WIDTH, G_HEIGHT, "the traders");
     SetTargetFPS(60);
-
+    
     RenderTexture2D screen = LoadRenderTexture(WIDTH, HEIGHT);
     SetTextureFilter(screen.texture, TEXTURE_FILTER_POINT);
 
     create_entities(entities);
     reset_game(&game);
+    game.sprites.spritesheet = LoadTexture("assets/spritesheet.png");
+    SetTextureFilter(game.sprites.spritesheet, TEXTURE_FILTER_POINT);
+    load_sprite_sources(&game);
 
     while (!WindowShouldClose()) {
         if (IsKeyPressed(KEY_LEFT_CONTROL)) {
@@ -305,18 +341,21 @@ int main (int argc, char *argv[])
                 for (int j = 0; j < COLS; j++) {
                     Map m = game.maps[0]; 
                     Tile m_entity = m.tiles[j][i];
+                    Rectangle dest = (Rectangle) {.x = (float)j * TILE_WIDTH, .y = (float)i * TILE_HEIGHT, .width = TILE_WIDTH, .height = TILE_HEIGHT};
+                    Vector2 dest_vec = (Vector2) {0,0};
+                    //DrawRectangleLines(dest.x, dest.y, dest.width, dest.height, RED);
                     switch (m_entity.entity.type) {
                         case EMPTY:
-                            DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, BLACK);
+                            //DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, BLACK);
                             break;
                         case TREE: {
                             float height_factor = m_entity.entity.health / 100.0f;
-                            DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, height_factor * TILE_HEIGHT, BROWN);
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[TREE], dest, dest_vec, 0.0f, WHITE);
                         }
                             break;
                         case STUMP: {
-                            float height_factor = m_entity.entity.health / 100.0f; 
-                            DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, height_factor * TILE_HEIGHT, DARKGRAY);
+                            float height_factor = m_entity.entity.health / 100.0f;
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[STUMP], dest, dest_vec, 0.0f, WHITE); 
                         }
                             break;
                         default:
@@ -326,7 +365,9 @@ int main (int argc, char *argv[])
             }
             
             Entity p = game.player;
-            DrawRectangle(p.pos[0] * TILE_WIDTH, p.pos[1] * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, DARKGREEN);
+            Rectangle dest_rect = (Rectangle) {.x = p.pos[0] * TILE_WIDTH, .y = p.pos[1] * TILE_HEIGHT, .width = TILE_WIDTH, .height = TILE_HEIGHT};
+            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[PLAYER], dest_rect, (Vector2) {0,0}, 0.0f, WHITE);
+            //DrawRectangle(p.pos[0] * TILE_WIDTH, p.pos[1] * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, DARKGREEN);
 
             if (game.selected_tile != NULL) {
                 Entity selected = game.selected_tile->entity;

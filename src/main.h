@@ -9,10 +9,11 @@
 
 #define ROWS 12
 #define COLS 16
-#define TILE_WIDTH (WIDTH / COLS)
-#define HALF_TILE_WIDTH (TILE_WIDTH * 0.5f)
-#define TILE_HEIGHT (HEIGHT / ROWS)
-#define HALF_TILE_HEIGHT (TILE_HEIGHT * 0.5f)
+#define TILE_WIDTH (float) (WIDTH / COLS)
+#define HALF_TILE_WIDTH (float) (TILE_WIDTH * 0.5f)
+#define TILE_HEIGHT (float) (HEIGHT / ROWS)
+#define HALF_TILE_HEIGHT (float) (TILE_HEIGHT * 0.5f)
+#define SPRITE_SIZE 32.0f
 
 #define NUM_MAPS 1
 #define MAP_ENTITY_NUM (ROWS * COLS)
@@ -58,6 +59,11 @@ typedef struct tile {
     Entity previous;
 } Tile;
 
+typedef struct Sprite {
+    Texture2D spritesheet;
+    Rectangle source[NUM_ENTITY_TYPES];
+} Sprites;
+
 typedef struct map {
     Tile tiles[COLS][ROWS];
     Entity_Queue entity_queue;
@@ -73,7 +79,7 @@ typedef struct game_state {
     Player_Stats stats;
     Tile* selected_tile;
     Map maps[NUM_MAPS];
-    Texture2D images[NUM_ENTITY_TYPES];
+    Sprites sprites;
     Map* current_map;
     bool debug_mode;
 } GameState;
@@ -93,6 +99,8 @@ void cut_target(Entity* p, Entity* t);
 void add_to_map_queue(Map* m, int x, int y);
 void handle_map_queue(Map* m, Entity_Queue* eq);
 void grow_stump(Map* m, Entity* e, int index);
+bool entities_adjacent(Entity e, Entity target);
+void load_sprite_sources(GameState* g);
 
 
 #endif
