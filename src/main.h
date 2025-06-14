@@ -13,7 +13,11 @@
 #define HALF_TILE_WIDTH (float) (TILE_WIDTH * 0.5f)
 #define TILE_HEIGHT (float) (HEIGHT / ROWS)
 #define HALF_TILE_HEIGHT (float) (TILE_HEIGHT * 0.5f)
+#define GAME_TILE_WIDTH (float) (G_WIDTH / COLS)
+#define GAME_TILE_HEIGHT (float) (G_HEIGHT / ROWS)
 #define SPRITE_SIZE 32.0f
+#define MAX_HOVER_TEXT_LEN 64
+#define FONT_SIZE 18
 
 #define NUM_MAPS 1
 #define MAP_ENTITY_NUM (ROWS * COLS)
@@ -75,6 +79,13 @@ typedef struct player_stats {
     int woodcut_dmg;
 } Player_Stats;
 
+typedef struct hover_text {
+    bool active;
+    char string[MAX_HOVER_TEXT_LEN];
+    Timer time;
+    int pos[2];
+} Hover_Text;
+
 typedef struct game_state {
     Entity player;
     Player_Stats stats;
@@ -82,6 +93,7 @@ typedef struct game_state {
     Map maps[NUM_MAPS];
     Sprites sprites;
     Map* current_map;
+    Hover_Text hover_text;
     bool debug_mode;
 } GameState;
 
@@ -102,6 +114,8 @@ void handle_map_queue(Map* m, Entity_Queue* eq);
 void grow_stump(Map* m, Entity* e, int index);
 bool entities_adjacent(Entity e, Entity target);
 void load_sprite_sources(GameState* g);
+void set_hover_text(Hover_Text* t, Tile target, char* msg);
+void update_hover_text(Hover_Text* t);
 
 
 #endif

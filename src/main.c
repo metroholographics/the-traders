@@ -1,6 +1,7 @@
 #include "raylib.h"
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 #include "main.h"
 
 GameState game;
@@ -106,8 +107,34 @@ void reset_game(GameState* g)
     g->current_map->tiles[11][7] = create_tile(TREE, STUMP, 11, 7);
     g->selected_tile = NULL;
     g->debug_mode = false;
-    
+    g->hover_text = (Hover_Text) {0};
+}
 
+void set_hover_text(Hover_Text* t, Tile target, char* msg)
+{
+    char* text = msg;
+    if (text == NULL) {
+        switch (target.entity.action) {
+            case CUT: {
+                text = "cut?";
+            }
+                break;
+            case EMPTY: {
+                text = "the land teems with overgrowth\n";
+            } 
+            break;
+            default:
+                break;
+        }
+    }
+   
+    if (text != NULL) {
+        t->active = true;
+        snprintf(t->string, MAX_HOVER_TEXT_LEN, text);
+        t->time.time = 0.0f;
+    } else {
+        t->active = false;
+    }
 }
 
 void handle_input(Entity* p)
@@ -117,13 +144,16 @@ void handle_input(Entity* p)
         Tile* selected = get_selected_tile(game.current_map);
         if (game.selected_tile == selected) {
             register_action(p, game.selected_tile);
+            
         } else {
             game.selected_tile = selected;
+            set_hover_text(&game.hover_text, *game.selected_tile, NULL);
         }
     } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
         if (game.selected_tile != NULL) {
             game.selected_tile = NULL;
         }
+        game.hover_text.active = false;
     }
     //Keyboard-handling
     int new_x = p->pos[0];
@@ -166,6 +196,7 @@ void handle_input(Entity* p)
 
 void register_action(Entity* p, Tile* target)
 {
+    game.hover_text.active = false;
     switch(target->entity.action) {
         case NO_ACTION:
             p->action = NO_ACTION;
@@ -174,6 +205,9 @@ void register_action(Entity* p, Tile* target)
             if (entities_adjacent(*p, target->entity)) {
                 p->action = CUT;
                 p->target = &target->entity;
+            } else {
+                game.hover_text.active = true;
+                set_hover_text(&game.hover_text, *target, "I'm too far...");
             }
         }
             break;
@@ -287,6 +321,26 @@ void grow_stump(Map* m, Entity* e, int index)
     }
 }
 
+void update_hover_text(Hover_Text* t)
+{
+    if (!t->active) return;
+
+    int text_w = MeasureText(t->string, FONT_SIZE);
+
+    //note: hove text position is in worldspace
+    int player_x = game.player.pos[0];
+    int player_y = game.player.pos[1];
+
+    int centre_x = (player_x * GAME_TILE_WIDTH) + (0.5f * GAME_TILE_WIDTH); 
+
+    int text_x = centre_x - (0.5f * text_w);
+    int text_y = player_y * GAME_TILE_HEIGHT;
+
+    t->pos[0] = text_x;
+    t->pos[1] = text_y - (0.125f * GAME_TILE_HEIGHT);
+
+}
+
 void update_game(GameState* g)
 {
     if (g->debug_mode) {
@@ -301,6 +355,7 @@ void update_game(GameState* g)
     }
     handle_action(&g->player);
     handle_input(&g->player);
+    update_hover_text(&g->hover_text);
     handle_map_queue(g->current_map, &g->current_map->entity_queue);
 
 }
@@ -376,7 +431,6 @@ int main (int argc, char *argv[])
             Entity p = game.player;
             Rectangle dest_rect = (Rectangle) {.x = p.pos[0] * TILE_WIDTH, .y = p.pos[1] * TILE_HEIGHT, .width = TILE_WIDTH, .height = TILE_HEIGHT};
             DrawTexturePro(game.sprites.spritesheet, game.sprites.source[PLAYER], dest_rect, (Vector2) {0,0}, 0.0f, WHITE);
-            //DrawRectangle(p.pos[0] * TILE_WIDTH, p.pos[1] * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, DARKGREEN);
 
             if (game.selected_tile != NULL) {
                 Entity selected = game.selected_tile->entity;
@@ -401,6 +455,10 @@ int main (int argc, char *argv[])
                 0.0f,
                 WHITE
             );
+            if (game.hover_text.active) {
+                Hover_Text t = game.hover_text;
+                DrawText(t.string, t.pos[0], t.pos[1], FONT_SIZE, WHITE);
+            }
             
         EndDrawing();
     }
