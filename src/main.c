@@ -11,11 +11,11 @@ Tile* get_selected_tile(Map* m)
 {
     int mouse_x = GetMouseX();
     int mouse_y = GetMouseY();
+    printf("%d %d\n", mouse_x, mouse_y);
     Vector2 mouse_world = screen_to_world(mouse_x, mouse_y);
     int tile_x = mouse_world.x / TILE_WIDTH;
     int tile_y = mouse_world.y / TILE_HEIGHT;
 
-    return &m->tiles[tile_x][tile_y];
     return &m->tiles[tile_x][tile_y];
 }
 
@@ -28,7 +28,7 @@ Vector2 screen_to_world(int x, int y)
 {
     int world_x = x / SCALE;
     int world_y = y / SCALE;
-    return (Vector2) {world_x,world_y};
+    return (Vector2) {world_x, world_y};
 }
 
 Map empty_map(void)
@@ -37,11 +37,11 @@ Map empty_map(void)
     for (int y = 0; y < ROWS; y++) {
         for (int x = 0; x < COLS; x++) {
             result.tiles[x][y] = create_tile(EMPTY, EMPTY, x, y);
-            result.biome = 0;
-            result.entity_queue.queue[0] = NULL;
-            result.entity_queue.count = 0;
         }
     }
+    result.biome = 0;
+    result.entity_queue.queue[0] = NULL;
+    result.entity_queue.count = 0;
     return result;
 }
 
@@ -66,7 +66,8 @@ void create_entities(Entity* e)
         .walkable = false,
         .action = CUT,
         .health = 100,
-        .action_rate = 0.5f
+        .action_rate = 0.65f,
+        .drop = LOG
     };
     e[STUMP] = (Entity){0};
     e[STUMP] = (Entity) {
@@ -100,7 +101,7 @@ void reset_game(GameState* g)
 
     g->maps[0] = empty_map();
     g->current_map = &g->maps[0];
-
+    g->current_map->tiles[5][3] = create_tile(TREE, STUMP, 5, 3);  
     g->current_map->tiles[10][8] = create_tile(TREE, STUMP, 10, 8);
     g->current_map->tiles[11][8] = create_tile(TREE, STUMP, 11, 8);
     g->current_map->tiles[10][5] = create_tile(TREE, STUMP, 10, 5);
@@ -108,6 +109,21 @@ void reset_game(GameState* g)
     g->selected_tile = NULL;
     g->debug_mode = false;
     g->hover_text = (Hover_Text) {0};
+
+    g->inventory = (Inventory) {0};
+    g->inventory.space = (Rectangle) {
+        .x = 0,
+        .y = 7 * GAME_TILE_HEIGHT,
+        .width = 4 * GAME_TILE_WIDTH,
+        .height = 5 * GAME_TILE_HEIGHT
+    };
+    g->inventory.slot_size = (Rectangle) {
+        .x = g->inventory.space.x + INV_INITIAL_OFFSET,
+        .y = g->inventory.space.y + INV_INITIAL_OFFSET,
+        .width = GAME_TILE_WIDTH - INV_INITIAL_OFFSET,
+        .height = GAME_TILE_HEIGHT - INV_INITIAL_OFFSET,
+    };
+
 }
 
 void set_hover_text(Hover_Text* t, Tile target, char* msg)
@@ -260,7 +276,7 @@ void cut_target(Entity* p, Entity* t)
     }
     p->timer.time += GetFrameTime();
 
-    if (t->health <= 0) {
+    if (t->health <= 15) {
         int tile_x = t->pos[0];
         int tile_y = t->pos[1];
         Tile* t = &game.current_map->tiles[tile_x][tile_y];
@@ -271,9 +287,29 @@ void cut_target(Entity* p, Entity* t)
         );
         add_to_map_queue(game.current_map, tile_x, tile_y);
         p->action = NO_ACTION; 
-        p->target = NULL; 
+        p->target = NULL;
+        add_to_inventory(LOG, &game); 
     }
 }
+
+void add_to_inventory(Drop drop, GameState* g)
+{
+    g->inventory_count[drop] += 1;
+    Drop* slots = g->inventory.slots;
+    int i = 0;
+    for (i = 0; i < INVENTORY_SLOTS; i++) {
+        if (slots[i] == NONE) {
+            slots[i] = drop;
+            break;
+        }
+    }
+
+    if (i == INVENTORY_SLOTS) {
+        printf("inventory full - handle this\n");
+        g->inventory_count[drop] -= 1;
+    }
+}
+
 
 void add_to_map_queue(Map* m, int x, int y)
 {
@@ -335,9 +371,14 @@ void update_hover_text(Hover_Text* t)
 
     int text_x = centre_x - (0.5f * text_w);
     int text_y = player_y * GAME_TILE_HEIGHT;
+    float y_offset = 0.125f;
+    if (player_y == 0) {
+        text_y += GAME_TILE_HEIGHT;
+        y_offset *= -1;
+    }
 
     t->pos[0] = text_x;
-    t->pos[1] = text_y - (0.125f * GAME_TILE_HEIGHT);
+    t->pos[1] = text_y - (y_offset * GAME_TILE_HEIGHT);
 
 }
 
@@ -358,6 +399,8 @@ void update_game(GameState* g)
     update_hover_text(&g->hover_text);
     handle_map_queue(g->current_map, &g->current_map->entity_queue);
 
+    //update_inventory_ui(g);
+
 }
 
 void load_sprite_sources(GameState* g)
@@ -369,6 +412,33 @@ void load_sprite_sources(GameState* g)
     src_array[STUMP]  = (Rectangle) {.x = 64.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
     src_array[GRASS]  = (Rectangle) {.x = 96.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
 
+}
+
+void load_drop_images(GameState* g)
+{
+    Rectangle* drop_array = g->sprites.drop_source;
+    drop_array[EMPTY] = (Rectangle) {0,0,0,0};
+    drop_array[LOG]   = (Rectangle) {.x = 32.0f, .y = 32.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+
+}
+
+void draw_display_ui(GameState* g)
+{
+    DrawRectangleRec(g->inventory.space, (Color) {10, 10, 10, 125});
+
+    Texture2D sheet = g->sprites.spritesheet;
+    Rectangle* drop_images = g->sprites.drop_source; 
+    Inventory inventory = g->inventory;
+    Rectangle inv_shape = inventory.slot_size;
+    for (int i = 0; i < INVENTORY_SLOTS; i++) {
+        Drop d = inventory.slots[i];
+        DrawTexturePro(sheet, drop_images[d], inv_shape, (Vector2){0,0}, 0.0f, WHITE);
+        inv_shape.x += GAME_TILE_WIDTH;
+        if ((i + 1) % 4 == 0) {
+            inv_shape.y += (GAME_TILE_HEIGHT);
+            inv_shape.x = inventory.slot_size.x;
+        }
+    }
 }
 
 int main (int argc, char *argv[])
@@ -386,6 +456,7 @@ int main (int argc, char *argv[])
     game.sprites.spritesheet = LoadTexture("assets/spritesheet.png");
     SetTextureFilter(game.sprites.spritesheet, TEXTURE_FILTER_POINT);
     load_sprite_sources(&game);
+    load_drop_images(&game);
 
     while (!WindowShouldClose()) {
         if (IsKeyPressed(KEY_LEFT_CONTROL)) {
@@ -405,7 +476,6 @@ int main (int argc, char *argv[])
                     switch (m_entity.entity.type) {
                         case EMPTY:
                             DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
-                            //DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, BLACK);
                             break;
                         case TREE: {
                             float height_factor = m_entity.entity.health / 100.0f;
@@ -459,7 +529,7 @@ int main (int argc, char *argv[])
                 Hover_Text t = game.hover_text;
                 DrawText(t.string, t.pos[0], t.pos[1], FONT_SIZE, WHITE);
             }
-            
+            draw_display_ui(&game);
         EndDrawing();
     }
 

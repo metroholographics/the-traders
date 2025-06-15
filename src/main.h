@@ -21,6 +21,8 @@
 
 #define NUM_MAPS 1
 #define MAP_ENTITY_NUM (ROWS * COLS)
+#define INVENTORY_SLOTS 16
+#define INV_INITIAL_OFFSET 3
 
 typedef enum {
     EMPTY = 0,
@@ -30,6 +32,12 @@ typedef enum {
     GRASS,
     NUM_ENTITY_TYPES
 } Entity_Type;
+
+typedef enum {
+    NONE = 0,
+    LOG,
+    NUM_DROPS
+} Drop;
 
 typedef enum {
     NO_ACTION = 0,
@@ -52,6 +60,7 @@ typedef struct Entity {
     float action_rate;
     int growth_per_tick;
     Timer timer;
+    Drop drop;
 } Entity;
 
 typedef struct EntityQueue {
@@ -67,6 +76,7 @@ typedef struct tile {
 typedef struct Sprite {
     Texture2D spritesheet;
     Rectangle source[NUM_ENTITY_TYPES];
+    Rectangle drop_source[NUM_DROPS];
 } Sprites;
 
 typedef struct map {
@@ -86,14 +96,27 @@ typedef struct hover_text {
     int pos[2];
 } Hover_Text;
 
+typedef struct inventory {
+    Rectangle space;
+    Rectangle slot_size;
+    Drop slots[INVENTORY_SLOTS];
+} Inventory;
+
+typedef struct ui {
+    Rectangle canvas;
+    Inventory inventory;
+} UI;
+
 typedef struct game_state {
     Entity player;
     Player_Stats stats;
-    Tile* selected_tile;
+    int inventory_count[NUM_DROPS];
     Map maps[NUM_MAPS];
-    Sprites sprites;
     Map* current_map;
+    Sprites sprites;
     Hover_Text hover_text;
+    Inventory inventory;
+    Tile* selected_tile;
     bool debug_mode;
 } GameState;
 
@@ -116,6 +139,9 @@ bool entities_adjacent(Entity e, Entity target);
 void load_sprite_sources(GameState* g);
 void set_hover_text(Hover_Text* t, Tile target, char* msg);
 void update_hover_text(Hover_Text* t);
+void load_drop_images(GameState* g);
+void add_to_inventory(Drop drop, GameState* g);
+void draw_display_ui(GameState* g);
 
 
 #endif

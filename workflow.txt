@@ -31,3 +31,6 @@
 
 - Adding entities
 
+- Hover text
+    - Passing in a NULL msg lets set hover text default to printing custom entity action based text
+    - Passing in a specific message displays the given message instead
