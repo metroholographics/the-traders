@@ -17,12 +17,18 @@
 #define GAME_TILE_HEIGHT (float) (G_HEIGHT / ROWS)
 #define SPRITE_SIZE 32.0f
 #define MAX_HOVER_TEXT_LEN 64
-#define FONT_SIZE 18
+#define FONT_SIZE 24
+#define FONT_SPACING 2
 
 #define NUM_MAPS 1
 #define MAP_ENTITY_NUM (ROWS * COLS)
 #define INVENTORY_SLOTS 16
 #define INV_INITIAL_OFFSET 3
+#define INV_Y_POS_FACTOR 0.58f
+#define INV_WIDTH_FACTOR 0.25f
+
+#define P_WHITE (Color) {254, 246, 221, 255}
+#define P_RED (Color) {225, 32, 45, 255}
 
 typedef enum {
     EMPTY = 0,
@@ -117,6 +123,7 @@ typedef struct game_state {
     Hover_Text hover_text;
     Inventory inventory;
     Tile* selected_tile;
+    Font game_font;
     bool debug_mode;
 } GameState;
 

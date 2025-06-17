@@ -11,7 +11,6 @@ Tile* get_selected_tile(Map* m)
 {
     int mouse_x = GetMouseX();
     int mouse_y = GetMouseY();
-    printf("%d %d\n", mouse_x, mouse_y);
     Vector2 mouse_world = screen_to_world(mouse_x, mouse_y);
     int tile_x = mouse_world.x / TILE_WIDTH;
     int tile_y = mouse_world.y / TILE_HEIGHT;
@@ -101,7 +100,7 @@ void reset_game(GameState* g)
 
     g->maps[0] = empty_map();
     g->current_map = &g->maps[0];
-    g->current_map->tiles[5][3] = create_tile(TREE, STUMP, 5, 3);  
+    g->current_map->tiles[5][3] = create_tile(TREE, STUMP, 5, 3);
     g->current_map->tiles[10][8] = create_tile(TREE, STUMP, 10, 8);
     g->current_map->tiles[11][8] = create_tile(TREE, STUMP, 11, 8);
     g->current_map->tiles[10][5] = create_tile(TREE, STUMP, 10, 5);
@@ -113,15 +112,15 @@ void reset_game(GameState* g)
     g->inventory = (Inventory) {0};
     g->inventory.space = (Rectangle) {
         .x = 0,
-        .y = 7 * GAME_TILE_HEIGHT,
-        .width = 4 * GAME_TILE_WIDTH,
-        .height = 5 * GAME_TILE_HEIGHT
+        .y = (INV_Y_POS_FACTOR * ROWS) * GAME_TILE_HEIGHT,
+        .width = INV_WIDTH_FACTOR * G_WIDTH,
+        .height = (1.0f - INV_Y_POS_FACTOR) * G_HEIGHT,
     };
     g->inventory.slot_size = (Rectangle) {
         .x = g->inventory.space.x + INV_INITIAL_OFFSET,
         .y = g->inventory.space.y + INV_INITIAL_OFFSET,
-        .width = GAME_TILE_WIDTH - INV_INITIAL_OFFSET,
-        .height = GAME_TILE_HEIGHT - INV_INITIAL_OFFSET,
+        .width = (g->inventory.space.width / 4) , //GAME_TILE_WIDTH - INV_INITIAL_OFFSET,
+        .height = (g->inventory.space.height / 4)//GAME_TILE_HEIGHT - INV_INITIAL_OFFSET,
     };
 
 }
@@ -361,7 +360,7 @@ void update_hover_text(Hover_Text* t)
 {
     if (!t->active) return;
 
-    int text_w = MeasureText(t->string, FONT_SIZE);
+    Vector2 text_w = MeasureTextEx(game.game_font, t->string, FONT_SIZE, FONT_SPACING);
 
     //note: hove text position is in worldspace
     int player_x = game.player.pos[0];
@@ -369,7 +368,7 @@ void update_hover_text(Hover_Text* t)
 
     int centre_x = (player_x * GAME_TILE_WIDTH) + (0.5f * GAME_TILE_WIDTH); 
 
-    int text_x = centre_x - (0.5f * text_w);
+    int text_x = centre_x - (0.5f * text_w.x);
     int text_y = player_y * GAME_TILE_HEIGHT;
     float y_offset = 0.125f;
     if (player_y == 0) {
@@ -433,9 +432,9 @@ void draw_display_ui(GameState* g)
     for (int i = 0; i < INVENTORY_SLOTS; i++) {
         Drop d = inventory.slots[i];
         DrawTexturePro(sheet, drop_images[d], inv_shape, (Vector2){0,0}, 0.0f, WHITE);
-        inv_shape.x += GAME_TILE_WIDTH;
+        inv_shape.x += inv_shape.width;
         if ((i + 1) % 4 == 0) {
-            inv_shape.y += (GAME_TILE_HEIGHT);
+            inv_shape.y += inv_shape.height;
             inv_shape.x = inventory.slot_size.x;
         }
     }
@@ -454,6 +453,7 @@ int main (int argc, char *argv[])
     create_entities(entities);
     reset_game(&game);
     game.sprites.spritesheet = LoadTexture("assets/spritesheet.png");
+    game.game_font = LoadFont("assets/fonts/Kobata-Bold.otf");
     SetTextureFilter(game.sprites.spritesheet, TEXTURE_FILTER_POINT);
     load_sprite_sources(&game);
     load_drop_images(&game);
@@ -489,7 +489,7 @@ int main (int argc, char *argv[])
                         }
                             break;
                         case STUMP: {
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[STUMP], dest, dest_vec, 0.0f, WHITE);
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[STUMP], dest, dest_vec, 0.0f, P_WHITE);
                         }
                             break;
                         default:
@@ -506,11 +506,11 @@ int main (int argc, char *argv[])
                 Entity selected = game.selected_tile->entity;
                 int select_x = selected.pos[0];
                 int select_y = selected.pos[1];
-                DrawCircle(select_x * TILE_WIDTH + HALF_TILE_WIDTH, select_y * TILE_HEIGHT + HALF_TILE_HEIGHT, 2, WHITE);
+                DrawCircle(select_x * TILE_WIDTH + HALF_TILE_WIDTH, select_y * TILE_HEIGHT + HALF_TILE_HEIGHT, FONT_SPACING, WHITE);
             }
 
             if (game.debug_mode) {
-                DrawText("Debug", 10, 10, 8, RED);
+                DrawTextEx(game.game_font, "Debug",(Vector2) {10, 10}, 22, FONT_SPACING, P_RED);
             }
         EndTextureMode();
 
@@ -527,7 +527,7 @@ int main (int argc, char *argv[])
             );
             if (game.hover_text.active) {
                 Hover_Text t = game.hover_text;
-                DrawText(t.string, t.pos[0], t.pos[1], FONT_SIZE, WHITE);
+                DrawTextEx(game.game_font, t.string,(Vector2){t.pos[0], t.pos[1]}, FONT_SIZE, FONT_SPACING, P_WHITE);
             }
             draw_display_ui(&game);
         EndDrawing();
