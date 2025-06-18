@@ -98,6 +98,8 @@ void reset_game(GameState* g)
         .woodcut_dmg = 30
     };
 
+    g->jobs = (Job_Manager) {0};
+
     g->maps[0] = empty_map();
     g->current_map = &g->maps[0];
     g->current_map->tiles[5][3] = create_tile(TREE, STUMP, 5, 3);
@@ -393,13 +395,38 @@ void update_game(GameState* g)
             printf("Action: %d\n", selected_entity.action);
         }
     }
+
+    tick_job_queue(&g->jobs);
+
+    if (g->jobs.create_job) {
+        create_job(&g->jobs);
+    }
+
     handle_action(&g->player);
     handle_input(&g->player);
     update_hover_text(&g->hover_text);
     handle_map_queue(g->current_map, &g->current_map->entity_queue);
+}
 
-    //update_inventory_ui(g);
+void create_job(Job_Manager* j)
+{
+    j->current_job.status = OFFERED;
+    //::todo: continue here - first add more drop types
 
+    j->create_job = false;
+}
+
+void tick_job_queue(Job_Manager* j) 
+{
+    if (j->current_job.status != INACTIVE) return;
+
+    j->timer.time += GetFrameTime();
+
+    if (j->timer.time >= NEW_JOB_TIME) {
+        j->create_job = true;
+        j->timer.time = 0.0f;
+    } 
+    return;
 }
 
 void load_sprite_sources(GameState* g)

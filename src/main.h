@@ -7,6 +7,9 @@
 #define G_WIDTH (WIDTH * SCALE)
 #define G_HEIGHT (HEIGHT * SCALE)
 
+#define P_WHITE (Color) {254, 246, 221, 255}
+#define P_RED (Color) {225, 32, 45, 255}
+
 #define ROWS 12
 #define COLS 16
 #define TILE_WIDTH (float) (WIDTH / COLS)
@@ -27,8 +30,7 @@
 #define INV_Y_POS_FACTOR 0.58f
 #define INV_WIDTH_FACTOR 0.25f
 
-#define P_WHITE (Color) {254, 246, 221, 255}
-#define P_RED (Color) {225, 32, 45, 255}
+#define NEW_JOB_TIME 2.0f
 
 typedef enum {
     EMPTY = 0,
@@ -51,6 +53,12 @@ typedef enum {
     GROW,
     NUM_ACTIONS
 } Action;
+
+typedef enum {
+    INACTIVE = 0,
+    OFFERED,
+    ACCEPTED
+} Job_State;
 
 typedef struct Timer {
     float time;
@@ -113,10 +121,27 @@ typedef struct ui {
     Inventory inventory;
 } UI;
 
+typedef struct job {
+    Drop requirements[3];
+    int amount[3];
+    float time_to_complete;
+    float time_taken;
+    int reward;
+    Job_State status;
+} Job;
+
+typedef struct job_manager {
+    Timer timer;
+    bool create_job;
+    Job current_job;
+    Job next_job;
+} Job_Manager;
+
 typedef struct game_state {
     Entity player;
     Player_Stats stats;
     int inventory_count[NUM_DROPS];
+    Job_Manager jobs;
     Map maps[NUM_MAPS];
     Map* current_map;
     Sprites sprites;
@@ -149,6 +174,7 @@ void update_hover_text(Hover_Text* t);
 void load_drop_images(GameState* g);
 void add_to_inventory(Drop drop, GameState* g);
 void draw_display_ui(GameState* g);
+void tick_job_queue(Job_Manager* j) 
 
 
 #endif
