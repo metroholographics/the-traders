@@ -64,6 +64,7 @@ void create_entities(Entity* e)
         .type = TREE,
         .walkable = false,
         .action = CUT,
+        .max_health = 100,
         .health = 100,
         .action_rate = 0.65f,
         .drop = LOG
@@ -73,10 +74,31 @@ void create_entities(Entity* e)
         .type = STUMP,
         .walkable = false,
         .action = GROW,
+        .max_health = 100,
         .health = 0,
         .action_rate = 1.0f,
         .growth_per_tick = 30,
-    }; 
+    };
+    e[RUIN] = (Entity){0};
+    e[RUIN] = (Entity) {
+        .type = RUIN,
+        .walkable = false,
+        .action = HARVEST,
+        .health = 50,
+        .action_rate = 0.5,
+        .drop = IVY,
+    };
+    e[CLEAN_RUIN] = (Entity) {0};
+    e[CLEAN_RUIN] = (Entity) {
+        .type = CLEAN_RUIN,
+        .walkable = false,
+        .action = GROW,
+        .max_health = 50,
+        .health = 0,
+        .action_rate = 1.0f,
+        .growth_per_tick = 15
+    };
+
 }
 
 Tile create_tile(Entity_Type current, Entity_Type previous, int x, int y)
@@ -103,6 +125,8 @@ void reset_game(GameState* g)
     g->maps[0] = empty_map();
     g->current_map = &g->maps[0];
     g->current_map->tiles[5][3] = create_tile(TREE, STUMP, 5, 3);
+    g->current_map->tiles[7][4] = create_tile(RUIN, CLEAN_RUIN, 7, 4);
+    g->current_map->tiles[2][10] = create_tile(RUIN, CLEAN_RUIN, 2, 10);
     g->current_map->tiles[10][8] = create_tile(TREE, STUMP, 10, 8);
     g->current_map->tiles[11][8] = create_tile(TREE, STUMP, 11, 8);
     g->current_map->tiles[10][5] = create_tile(TREE, STUMP, 10, 5);
@@ -134,6 +158,10 @@ void set_hover_text(Hover_Text* t, Tile target, char* msg)
         switch (target.entity.action) {
             case CUT: {
                 text = "cut?";
+            }
+                break;
+            case HARVEST: {
+                text = "harvest?";
             }
                 break;
             case EMPTY: {
@@ -228,6 +256,16 @@ void register_action(Entity* p, Tile* target)
             }
         }
             break;
+        case HARVEST: {
+            if (entities_adjacent(*p, target->entity)) {
+                p->action = HARVEST;
+                p->target = &target->entity;
+            } else {
+                game.hover_text.active = true;
+                set_hover_text(&game.hover_text, *target, "I'm too far...");
+            }
+        }
+            break;
         default:
             break;
     }
@@ -242,6 +280,10 @@ void handle_action(Entity* p)
         case CUT: {
                 cut_target(p, p->target);
             } 
+            break;
+        case HARVEST: {
+            harvest_target(p, p->target);
+        }
             break;
         default:
             break;
@@ -291,6 +333,32 @@ void cut_target(Entity* p, Entity* t)
         p->target = NULL;
         add_to_inventory(LOG, &game); 
     }
+}
+
+void harvest_target(Entity* p, Entity* t)
+{
+    float current_time = p->timer.time;
+    if (current_time > t->action_rate) p->timer.time = current_time = 0.0f;
+    if (current_time == 0.0f) {
+        t->health -= 20;
+    }
+    p->timer.time += GetFrameTime();
+    if (t->health <= 0) {
+        int tile_x = t->pos[0];
+        int tile_y = t->pos[1];
+        Tile* t = &game.current_map->tiles[tile_x][tile_y];
+        *t = create_tile(
+            t->previous.type,
+            t->entity.type,
+            tile_x, tile_y
+        );
+        add_to_map_queue(game.current_map, tile_x, tile_y);
+        p->action = NO_ACTION; 
+        p->target = NULL;
+        add_to_inventory(IVY, &game); 
+    }
+
+    return;
 }
 
 void add_to_inventory(Drop drop, GameState* g)
@@ -346,7 +414,7 @@ void grow_stump(Map* m, Entity* e, int index)
     if (e->timer.time < e->action_rate) return;
 
     e->timer.time = 0.0f; // Reset timer
-    if (e->health < 100) {
+    if (e->health < e->max_health) {
         e->health += e->growth_per_tick;
     } else {
         int x = e->pos[0];
@@ -433,10 +501,12 @@ void load_sprite_sources(GameState* g)
 {
     Rectangle* src_array = g->sprites.source;
     src_array[EMPTY]  = (Rectangle) {0,0,0,0};
-    src_array[PLAYER] = (Rectangle) {.x =  0.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
-    src_array[TREE]   = (Rectangle) {.x = 32.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
-    src_array[STUMP]  = (Rectangle) {.x = 64.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
-    src_array[GRASS]  = (Rectangle) {.x = 96.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    src_array[PLAYER] = (Rectangle) {.x =  0.0f,  .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    src_array[TREE]   = (Rectangle) {.x = 32.0f,  .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    src_array[STUMP]  = (Rectangle) {.x = 64.0f,  .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    src_array[GRASS]  = (Rectangle) {.x = 96.0f,  .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    src_array[RUIN]   = (Rectangle) {.x = 128.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    src_array[CLEAN_RUIN] = (Rectangle) {.x = 128.0f, .y = 32.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
 
 }
 
@@ -445,7 +515,7 @@ void load_drop_images(GameState* g)
     Rectangle* drop_array = g->sprites.drop_source;
     drop_array[EMPTY] = (Rectangle) {0,0,0,0};
     drop_array[LOG]   = (Rectangle) {.x = 32.0f, .y = 32.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
-
+    drop_array[IVY]   = (Rectangle) {.x = 128.0f, .y = 64.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
 }
 
 void draw_display_ui(GameState* g)
@@ -513,6 +583,14 @@ int main (int argc, char *argv[])
                             dest.y = ((float) i * TILE_HEIGHT) + (chop * TILE_WIDTH);
                             dest.height = height_factor * TILE_HEIGHT;
                             DrawTexturePro(game.sprites.spritesheet, source, dest, dest_vec, 0.0f, WHITE);
+                        }
+                            break;
+                        case RUIN: {
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[RUIN], dest, dest_vec, 0.0f, P_WHITE);
+                        }
+                            break;
+                        case CLEAN_RUIN: {
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[CLEAN_RUIN], dest, dest_vec, 0.0f, P_WHITE);
                         }
                             break;
                         case STUMP: {

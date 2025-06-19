@@ -38,12 +38,15 @@ typedef enum {
     TREE,
     STUMP,
     GRASS,
+    RUIN,
+    CLEAN_RUIN,
     NUM_ENTITY_TYPES
 } Entity_Type;
 
 typedef enum {
     NONE = 0,
     LOG,
+    IVY,
     NUM_DROPS
 } Drop;
 
@@ -51,6 +54,7 @@ typedef enum {
     NO_ACTION = 0,
     CUT,
     GROW,
+    HARVEST,
     NUM_ACTIONS
 } Action;
 
@@ -70,6 +74,7 @@ typedef struct Entity {
     bool walkable;
     Action action;
     struct Entity* target;
+    int max_health;
     int health;
     float action_rate;
     int growth_per_tick;
@@ -164,6 +169,7 @@ void register_action(Entity* p, Tile* target);
 bool tile_in_bounds(int x, int y);
 void handle_action(Entity* p);
 void cut_target(Entity* p, Entity* t);
+void harvest_target(Entity* p, Entity* t);
 void add_to_map_queue(Map* m, int x, int y);
 void handle_map_queue(Map* m, Entity_Queue* eq);
 void grow_stump(Map* m, Entity* e, int index);
@@ -174,7 +180,8 @@ void update_hover_text(Hover_Text* t);
 void load_drop_images(GameState* g);
 void add_to_inventory(Drop drop, GameState* g);
 void draw_display_ui(GameState* g);
-void tick_job_queue(Job_Manager* j) 
+void tick_job_queue(Job_Manager* j);
+void create_job(Job_Manager* j); 
 
 
 #endif
