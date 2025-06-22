@@ -150,6 +150,7 @@ void reset_game(GameState* g)
         .width = (g->ui.inventory.space.width / 4) , //GAME_TILE_WIDTH - INV_INITIAL_OFFSET,
         .height = (g->ui.inventory.space.height / 4)//GAME_TILE_HEIGHT - INV_INITIAL_OFFSET,
     };
+    g->ui.shapes[INVENTORY] = g->ui.inventory.space;
 
     g->ui.offer = (Job_Offer) {0};
     g->ui.offer.space = (Rectangle) {
@@ -165,7 +166,8 @@ void reset_game(GameState* g)
     g->ui.offer.slot_size.width = (g->ui.offer.space.width / 3);
     g->ui.offer.slot_size.height = (g->ui.offer.space.height - g->ui.offer.slot_size.y);
     g->ui.offer.reward_pos = (Vector2) {.x = 0, .y = (0.33f * g->ui.offer.space.height)};
-    
+    g->ui.shapes[JOB_OFFER] = g->ui.offer.space;
+
     Button *b = &g->ui.offer.accept_button;
     *b = (Button) {0};
     b->clickable = true;
@@ -182,57 +184,141 @@ void reset_game(GameState* g)
         .x = acc_centre_x - (0.5f* accept_text_size.x),
         .y = acc_centre_y - (0.5f * accept_text_size.y)
     };
+    g->ui.shapes[JOB_ACCEPT_BUTTON] = g->ui.offer.accept_button.shape;
 }
 
-void set_hover_text(Hover_Text* t, Tile target, char* msg)
+void set_entity_action_text(char* b, Entity e)
 {
-    char* text = msg;
-    if (text == NULL) {
-        switch (target.entity.action) {
-            case CUT: {
-                text = "cut?";
-            }
-                break;
-            case HARVEST: {
-                text = "harvest?";
-            }
-                break;
-            case EMPTY: {
-                text = "the land teems with overgrowth\n";
-            } 
+    char* text = "\0";
+    switch (e.action) {
+        case CUT: {
+            text = "cut?";
             break;
-            default:
-                break;
+        }
+            
+        case HARVEST: {
+            text = "harvest?";
+            break;
+        }
+        case EMPTY: {
+            text = "the land teems with overgrowth\n";
+            break;
+        } 
+        default:
+            break;
+    }
+    snprintf(b, MAX_HOVER_TEXT_LEN, text);
+}
+
+void set_hover_text(Hover_Text* t, char* msg, float time_limit)
+{
+    if (msg == NULL || msg[0] == '\0') {
+        t->active = false;
+        return;
+    }
+    t->active = true;
+    snprintf(t->string, MAX_HOVER_TEXT_LEN, msg);
+    t->time.time = 0.0f;
+    t->max_time = time_limit;
+}
+
+void update_hover_text(Hover_Text* t)
+{
+    if (!t->active) return;
+
+    if (t->max_time != 0.0f) {
+        t->time.time += GetFrameTime();
+        if (t->time.time >= t->max_time) {
+            t->active = false;
+            t->max_time = 0.0f;
         }
     }
-   
-    if (text != NULL) {
-        t->active = true;
-        snprintf(t->string, MAX_HOVER_TEXT_LEN, text);
-        t->time.time = 0.0f;
-    } else {
-        t->active = false;
+
+    Vector2 text_w = MeasureTextEx(game.game_font, t->string, FONT_SIZE, FONT_SPACING);
+
+    //note: hover text position is in worldspace
+    int player_x = game.player.pos[0];
+    int player_y = game.player.pos[1];
+
+    int centre_x = (player_x * GAME_TILE_WIDTH) + (0.5f * GAME_TILE_WIDTH); 
+
+    int text_x = centre_x - (0.5f * text_w.x);
+    int text_y = player_y * GAME_TILE_HEIGHT;
+    float y_offset = 0.125f;
+    if (player_y == 0) {
+        text_y += GAME_TILE_HEIGHT;
+        y_offset *= -1;
     }
+
+    t->pos[0] = text_x;
+    t->pos[1] = text_y - (y_offset * GAME_TILE_HEIGHT);
+
+}
+
+
+bool mouse_in_rec(Vector2 mouse_pos, Rectangle rec) {
+    Vector2 mp = mouse_pos;
+    return (mp.x >= rec.x && mp.x <= rec.x + rec.width && mp.y >= rec.y && mp.y <= rec.y + rec.height);
+}
+
+bool handle_ui_clicks(Vector2 mouse_pos, GameState* g) {
+    int i = 0;
+    Job_State job_status = g->jobs.current_job.status;
+    for (i = 0; i < NUM_UI_ELEMENTS; i++) {
+        if (mouse_in_rec(mouse_pos, g->ui.shapes[i])) {
+            break;
+        }
+    }
+    switch (i) {
+        case INVENTORY:
+            return true;
+            break;
+        case JOB_OFFER:
+            if (job_status == OFFERED) return true;
+            break;
+        case JOB_ACCEPT_BUTTON:
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && job_status == OFFERED) {
+                g->jobs.current_job.status = ACCEPTED;
+                g->jobs.timer.time = 0.0f;
+                set_hover_text(&g->hover_text,"Got a new payload...", 2.0f);
+                return true;
+            }
+            break;
+        case NUM_UI_ELEMENTS:
+            break;
+        default: break;
+    }
+    return false;
 }
 
 void handle_input(Entity* p)
 {
     //Mouse-Handling
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        Tile* selected = get_selected_tile(game.current_map);
-        if (game.selected_tile == selected) {
-            register_action(p, game.selected_tile);
-            
-        } else {
-            game.selected_tile = selected;
-            set_hover_text(&game.hover_text, *game.selected_tile, NULL);
+    //check if hovering over UI element, and then handle accordingly
+    Vector2 mouse_pos = GetMousePosition();
+
+    bool ui_clicked = handle_ui_clicks(mouse_pos, &game);
+    if (!ui_clicked) {
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            Tile* selected = get_selected_tile(game.current_map);
+            if (game.selected_tile == selected) {
+                register_action(p, game.selected_tile);
+                
+            } else {
+                game.selected_tile = selected;
+                char buffer[MAX_HOVER_TEXT_LEN];
+                set_entity_action_text(buffer, game.selected_tile->entity);
+                float msg_time = (selected->entity.type == EMPTY) ? 1.0f : 0.0f;
+                set_hover_text(&game.hover_text, buffer, msg_time);
+            }
+        } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+            if (game.selected_tile != NULL) {
+                game.selected_tile = NULL;
+            }
+            game.hover_text.active = false;
         }
-    } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
-        if (game.selected_tile != NULL) {
-            game.selected_tile = NULL;
-        }
-        game.hover_text.active = false;
     }
+
     //Keyboard-handling
     int new_x = p->pos[0];
     int new_y = p->pos[1];
@@ -285,7 +371,7 @@ void register_action(Entity* p, Tile* target)
                 p->target = &target->entity;
             } else {
                 game.hover_text.active = true;
-                set_hover_text(&game.hover_text, *target, "I'm too far...");
+                set_hover_text(&game.hover_text, "I'm too far...", 1.0f);
             }
         }
             break;
@@ -295,7 +381,7 @@ void register_action(Entity* p, Tile* target)
                 p->target = &target->entity;
             } else {
                 game.hover_text.active = true;
-                set_hover_text(&game.hover_text, *target, "I'm too far...");
+                set_hover_text(&game.hover_text, "I'm too far...", 1.0f);
             }
         }
             break;
@@ -315,8 +401,8 @@ void handle_action(Entity* p)
             } 
             break;
         case HARVEST: {
-            harvest_target(p, p->target);
-        }
+                harvest_target(p, p->target);
+            }
             break;
         default:
             break;
@@ -407,7 +493,8 @@ void add_to_inventory(Drop drop, GameState* g)
     }
 
     if (i == INVENTORY_SLOTS) {
-        printf("inventory full - handle this\n");
+        set_hover_text(&g->hover_text, "My bag is full!", 0.75f);
+        //printf("inventory full - handle this\n");
         g->inventory_count[drop] -= 1;
     }
 }
@@ -433,7 +520,7 @@ void handle_map_queue(Map* m, Entity_Queue* eq)
         if (e == NULL) continue;
         switch (e->action) {
             case GROW:
-                grow_stump(m, e, i);
+                grow_entity(m, e, i);
                 break;
             default:
                 break;
@@ -441,7 +528,7 @@ void handle_map_queue(Map* m, Entity_Queue* eq)
     }
 }
 
-void grow_stump(Map* m, Entity* e, int index)
+void grow_entity(Map* m, Entity* e, int index)
 {
     e->timer.time += GetFrameTime();
     if (e->timer.time < e->action_rate) return;
@@ -457,31 +544,6 @@ void grow_stump(Map* m, Entity* e, int index)
         m->entity_queue.queue[index] = NULL; // Remove from queue
         m->entity_queue.count--;
     }
-}
-
-void update_hover_text(Hover_Text* t)
-{
-    if (!t->active) return;
-
-    Vector2 text_w = MeasureTextEx(game.game_font, t->string, FONT_SIZE, FONT_SPACING);
-
-    //note: hove text position is in worldspace
-    int player_x = game.player.pos[0];
-    int player_y = game.player.pos[1];
-
-    int centre_x = (player_x * GAME_TILE_WIDTH) + (0.5f * GAME_TILE_WIDTH); 
-
-    int text_x = centre_x - (0.5f * text_w.x);
-    int text_y = player_y * GAME_TILE_HEIGHT;
-    float y_offset = 0.125f;
-    if (player_y == 0) {
-        text_y += GAME_TILE_HEIGHT;
-        y_offset *= -1;
-    }
-
-    t->pos[0] = text_x;
-    t->pos[1] = text_y - (y_offset * GAME_TILE_HEIGHT);
-
 }
 
 void update_game(GameState* g)
@@ -510,6 +572,25 @@ void update_game(GameState* g)
     handle_map_queue(g->current_map, &g->current_map->entity_queue);
 
     update_ui_elements(g);
+}
+
+void tick_job_queue(Job_Manager* j) 
+{
+    j->timer.time += GetFrameTime();
+
+    if (j->current_job.status == OFFERED) {
+        if (j->timer.time >= JOB_ACCEPT_TIME) {
+            j->timer.time = 0.0f;
+            j->current_job.status = INACTIVE;
+            return; //Job has been offered and not accepted - next frame, clock starts for new job offer
+        }
+    }
+
+    if (j->current_job.status == INACTIVE && j->timer.time >= NEW_JOB_TIME) {
+        j->create_job = true;
+        j->timer.time = 0.0f;
+    } 
+    return;
 }
 
 void create_job(Job_Manager* j)
@@ -551,26 +632,7 @@ void create_job(Job_Manager* j)
     j->current_job = job; 
 }
 
-void tick_job_queue(Job_Manager* j) 
-{
-    //if (j->current_job.status != INACTIVE ) return;
 
-    j->timer.time += GetFrameTime();
-
-    if (j->current_job.status == OFFERED) {
-        if (j->timer.time >= JOB_ACCEPT_TIME) {
-            j->timer.time = 0.0f;
-            j->current_job.status = INACTIVE;
-            return; //Job has been offered and not accepted - next frame, clock starts for new job offer
-        }
-    }
-
-    if (j->timer.time >= NEW_JOB_TIME && j->current_job.status == INACTIVE) {
-        j->create_job = true;
-        j->timer.time = 0.0f;
-    } 
-    return;
-}
 
 void load_sprite_sources(GameState* g)
 {
@@ -609,7 +671,7 @@ void draw_display_ui(GameState* g)
 
     Inventory inventory = g->ui.inventory;
     Rectangle inv_shape = inventory.slot_size;
-    DrawRectangleRec(g->ui.inventory.space, (Color) {10, 10, 10, 125});
+    DrawRectangleRec(g->ui.inventory.space, (Color) {10, 10, 10, 255});
     for (int i = 0; i < INVENTORY_SLOTS; i++) {
         Drop d = inventory.slots[i];
         DrawTexturePro(sheet, drop_images[d], inv_shape, (Vector2){0,0}, 0.0f, WHITE);
@@ -717,9 +779,7 @@ int main (int argc, char *argv[])
                 DrawCircle(select_x * TILE_WIDTH + HALF_TILE_WIDTH, select_y * TILE_HEIGHT + HALF_TILE_HEIGHT, FONT_SPACING, WHITE);
             }
 
-            if (game.debug_mode) {
-                DrawTextEx(game.game_font, "Debug",(Vector2) {10, 10}, 22, FONT_SPACING, P_RED);
-            }
+            
         EndTextureMode();
 
         //Drawing to frame buffer
@@ -738,6 +798,10 @@ int main (int argc, char *argv[])
                 DrawTextEx(game.game_font, t.string,(Vector2){t.pos[0], t.pos[1]}, FONT_SIZE, FONT_SPACING, P_WHITE);
             }
             draw_display_ui(&game);
+            if (game.debug_mode) {
+                DrawTextEx(game.game_font, "Debug",(Vector2) {10, 10}, 48, FONT_SPACING, P_RED);
+                DrawFPS(100, 10);
+            }
         EndDrawing();
     }
 

@@ -20,7 +20,7 @@
 #define GAME_TILE_HEIGHT (float) (G_HEIGHT / ROWS)
 #define SPRITE_SIZE 32.0f
 #define MAX_HOVER_TEXT_LEN 64
-#define FONT_SIZE 24
+#define FONT_SIZE 26
 #define FONT_SPACING 2
 
 #define NUM_MAPS 1
@@ -65,6 +65,13 @@ typedef enum {
     OFFERED,
     ACCEPTED
 } Job_State;
+
+typedef enum {
+    INVENTORY = 0,
+    JOB_OFFER,
+    JOB_ACCEPT_BUTTON,
+    NUM_UI_ELEMENTS,
+} UI_ELEMENTS;
 
 typedef struct Timer {
     float time;
@@ -114,6 +121,7 @@ typedef struct hover_text {
     bool active;
     char string[MAX_HOVER_TEXT_LEN];
     Timer time;
+    float max_time;
     int pos[2];
 } Hover_Text;
 
@@ -139,9 +147,9 @@ typedef struct job_offer {
 } Job_Offer;
 
 typedef struct ui {
-    Rectangle canvas;
     Inventory inventory;
     Job_Offer offer;
+    Rectangle shapes[NUM_UI_ELEMENTS];
 } UI;
 
 typedef struct job {
@@ -192,10 +200,10 @@ void cut_target(Entity* p, Entity* t);
 void harvest_target(Entity* p, Entity* t);
 void add_to_map_queue(Map* m, int x, int y);
 void handle_map_queue(Map* m, Entity_Queue* eq);
-void grow_stump(Map* m, Entity* e, int index);
+void grow_entity(Map* m, Entity* e, int index);
 bool entities_adjacent(Entity e, Entity target);
 void load_sprite_sources(GameState* g);
-void set_hover_text(Hover_Text* t, Tile target, char* msg);
+void set_hover_text(Hover_Text* t, char* msg, float time_limit);
 void update_hover_text(Hover_Text* t);
 void load_drop_images(GameState* g);
 void add_to_inventory(Drop drop, GameState* g);
@@ -203,7 +211,9 @@ void draw_display_ui(GameState* g);
 void tick_job_queue(Job_Manager* j);
 void create_job(Job_Manager* j); 
 void update_ui_elements(GameState* g);
-
+bool handle_ui_clicks(Vector2 mouse_pos, GameState* g);
+bool mouse_in_rec(Vector2 mouse_pos, Rectangle rec);
+void set_entity_action_text(char* b, Entity e);
 
 #endif
 

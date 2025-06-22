@@ -26,11 +26,21 @@
             - This means when one state ends, the .current and .previous entity can swap.
         - Note, these aren't pointers - they are references to what entity is on the tile.
     - When you interact with an entity, you must interact with a pointer to the entity accessed from the tile
-        - e.g., some Tile* t, t->target.
+        - e.g., some Tile* t, update entity with t->entity.
     - Tiles are stored in a 2D array on a Map. I guess the memory for each tile is allocated when the map is allocted
 
 - Adding entities
 
+- UI
+    - When adding new UI, check to see if it needs to be added to the UI shapes rectangle.
+        - This is the elements to see when checking if mouse is hovering a UI element
+        - This may also need some additional state logic to confirm e.g. only check mouse-clicks over job offer button if a job.status == OFFERED
+            - i.e, we dont want UI clicks to do anything if the UI isn't actively on the screen
+
 - Hover text
-    - Passing in a NULL msg lets set hover text default to printing custom entity action based text
-    - Passing in a specific message displays the given message instead
+    - Pass in 0.0f for messages that stay hovered till next time hover text changes
+    - Pass in a float (in seconds) for messages with a duration
+    - Note max message size
+    - Note char buffer shenanigans with set_entity_action_text
+        - (currently, a leading '\0' indicates that there is no message);
+    - the set_hover_text function will make hover text inactive if msg is NULL or msg[0] is '\0' (null-terminate)
