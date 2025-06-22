@@ -29,8 +29,10 @@
 #define INV_INITIAL_OFFSET 3
 #define INV_Y_POS_FACTOR 0.58f
 #define INV_WIDTH_FACTOR 0.25f
+#define OFFER_Y_FACTOR 0.0f
 
 #define NEW_JOB_TIME 2.0f
+#define JOB_ACCEPT_TIME 5.0f
 
 typedef enum {
     EMPTY = 0,
@@ -115,20 +117,37 @@ typedef struct hover_text {
     int pos[2];
 } Hover_Text;
 
+typedef struct button {
+    bool clickable;
+    Rectangle shape;
+    Vector2 accept_text_pos;
+} Button;
+
 typedef struct inventory {
     Rectangle space;
     Rectangle slot_size;
     Drop slots[INVENTORY_SLOTS];
 } Inventory;
 
+typedef struct job_offer {
+    Button accept_button;
+    float accept_percent;
+    Rectangle space;
+    Rectangle slot_size;
+    Vector2 reward_pos;
+    Vector2 estimate_pos;
+} Job_Offer;
+
 typedef struct ui {
     Rectangle canvas;
     Inventory inventory;
+    Job_Offer offer;
 } UI;
 
 typedef struct job {
     Drop requirements[3];
     int amount[3];
+    int true_amount;
     float time_to_complete;
     float time_taken;
     int reward;
@@ -151,6 +170,7 @@ typedef struct game_state {
     Map* current_map;
     Sprites sprites;
     Hover_Text hover_text;
+    UI ui;
     Inventory inventory;
     Tile* selected_tile;
     Font game_font;
@@ -182,6 +202,9 @@ void add_to_inventory(Drop drop, GameState* g);
 void draw_display_ui(GameState* g);
 void tick_job_queue(Job_Manager* j);
 void create_job(Job_Manager* j); 
+void update_ui_elements(GameState* g);
 
 
 #endif
+
+

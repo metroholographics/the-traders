@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
+#include <time.h>
 #include "main.h"
 
 GameState game;
@@ -112,6 +113,7 @@ Tile create_tile(Entity_Type current, Entity_Type previous, int x, int y)
 
 void reset_game(GameState* g)
 {
+    SetRandomSeed(time(NULL));
     g->player = entities[PLAYER];
     g->player.pos[0] = 5;
     g->player.pos[1] = 5;
@@ -135,20 +137,51 @@ void reset_game(GameState* g)
     g->debug_mode = false;
     g->hover_text = (Hover_Text) {0};
 
-    g->inventory = (Inventory) {0};
-    g->inventory.space = (Rectangle) {
+    g->ui.inventory = (Inventory) {0};
+    g->ui.inventory.space = (Rectangle) {
         .x = 0,
         .y = (INV_Y_POS_FACTOR * ROWS) * GAME_TILE_HEIGHT,
         .width = INV_WIDTH_FACTOR * G_WIDTH,
         .height = (1.0f - INV_Y_POS_FACTOR) * G_HEIGHT,
     };
-    g->inventory.slot_size = (Rectangle) {
-        .x = g->inventory.space.x + INV_INITIAL_OFFSET,
-        .y = g->inventory.space.y + INV_INITIAL_OFFSET,
-        .width = (g->inventory.space.width / 4) , //GAME_TILE_WIDTH - INV_INITIAL_OFFSET,
-        .height = (g->inventory.space.height / 4)//GAME_TILE_HEIGHT - INV_INITIAL_OFFSET,
+    g->ui.inventory.slot_size = (Rectangle) {
+        .x = g->ui.inventory.space.x + INV_INITIAL_OFFSET,
+        .y = g->ui.inventory.space.y + INV_INITIAL_OFFSET,
+        .width = (g->ui.inventory.space.width / 4) , //GAME_TILE_WIDTH - INV_INITIAL_OFFSET,
+        .height = (g->ui.inventory.space.height / 4)//GAME_TILE_HEIGHT - INV_INITIAL_OFFSET,
     };
 
+    g->ui.offer = (Job_Offer) {0};
+    g->ui.offer.space = (Rectangle) {
+        .x = 0,
+        .y = (OFFER_Y_FACTOR * ROWS) * GAME_TILE_HEIGHT,
+        .width = INV_WIDTH_FACTOR * G_WIDTH,
+        .height = 0.25f * G_HEIGHT,
+    };
+    g->ui.offer.slot_size = (Rectangle) {
+        .x = g->ui.offer.space.x + INV_INITIAL_OFFSET,
+        .y = g->ui.offer.space.y + (0.5f * g->ui.offer.space.height),
+    };
+    g->ui.offer.slot_size.width = (g->ui.offer.space.width / 3);
+    g->ui.offer.slot_size.height = (g->ui.offer.space.height - g->ui.offer.slot_size.y);
+    g->ui.offer.reward_pos = (Vector2) {.x = 0, .y = (0.33f * g->ui.offer.space.height)};
+    
+    Button *b = &g->ui.offer.accept_button;
+    *b = (Button) {0};
+    b->clickable = true;
+    b->shape = (Rectangle) {
+        .x = g->ui.offer.space.x,
+        .y = g->ui.offer.space.y + g->ui.offer.space.height,
+        .width = g->ui.offer.space.width,
+        .height = (GAME_TILE_HEIGHT)
+    };
+    Vector2 accept_text_size = MeasureTextEx(g->game_font, "ACCEPT?", 32, 2);
+    float acc_centre_x = b->shape.x + (0.5f * b->shape.width);
+    float acc_centre_y = b->shape.y + (0.5f * b->shape.height);
+    b->accept_text_pos = (Vector2) {
+        .x = acc_centre_x - (0.5f* accept_text_size.x),
+        .y = acc_centre_y - (0.5f * accept_text_size.y)
+    };
 }
 
 void set_hover_text(Hover_Text* t, Tile target, char* msg)
@@ -364,7 +397,7 @@ void harvest_target(Entity* p, Entity* t)
 void add_to_inventory(Drop drop, GameState* g)
 {
     g->inventory_count[drop] += 1;
-    Drop* slots = g->inventory.slots;
+    Drop* slots = g->ui.inventory.slots;
     int i = 0;
     for (i = 0; i < INVENTORY_SLOTS; i++) {
         if (slots[i] == NONE) {
@@ -468,29 +501,71 @@ void update_game(GameState* g)
 
     if (g->jobs.create_job) {
         create_job(&g->jobs);
+        g->jobs.create_job = false;
     }
 
     handle_action(&g->player);
     handle_input(&g->player);
     update_hover_text(&g->hover_text);
     handle_map_queue(g->current_map, &g->current_map->entity_queue);
+
+    update_ui_elements(g);
 }
 
 void create_job(Job_Manager* j)
 {
-    j->current_job.status = OFFERED;
-    //::todo: continue here - first add more drop types
+    Job job = (Job){0};
+    job.status = OFFERED;
+    int chance = GetRandomValue(1, 10);
+    //printf("%d\n", chance);
+    Drop first_drop;
+    Drop second_drop;
+    for (int i = 0; i < 3; i++) {
+        Drop to_add = NONE;
+        if (i == 0) {
+            to_add = GetRandomValue(1, NUM_DROPS - 1); //::todo: change this to a random from KNOWN drops
+            int amount = GetRandomValue(1, 10); //::todo: tier this somehow based on drop rarity
+            job.requirements[0] = to_add;
+            job.amount[0] = amount;
+            job.true_amount += amount;
+            first_drop = to_add;
+        }
+        if (i == 1 && chance <= 6) {
+            do {
+                to_add = GetRandomValue(1, NUM_DROPS - 1);
+            } while (to_add == first_drop);
+            int amount = GetRandomValue(1, 10);
+            job.requirements[1] = to_add;
+            job.amount[1] = amount;
+            job.true_amount += amount;
+            second_drop = to_add;
+        }
+        if (i == 3 && chance <= 3) {
+            continue;
+        }
+    }
+    //::todo: apply some logic to these
+    job.time_to_complete = job.time_taken = 0.0f;
+    job.reward = 50;
 
-    j->create_job = false;
+    j->current_job = job; 
 }
 
 void tick_job_queue(Job_Manager* j) 
 {
-    if (j->current_job.status != INACTIVE) return;
+    //if (j->current_job.status != INACTIVE ) return;
 
     j->timer.time += GetFrameTime();
 
-    if (j->timer.time >= NEW_JOB_TIME) {
+    if (j->current_job.status == OFFERED) {
+        if (j->timer.time >= JOB_ACCEPT_TIME) {
+            j->timer.time = 0.0f;
+            j->current_job.status = INACTIVE;
+            return; //Job has been offered and not accepted - next frame, clock starts for new job offer
+        }
+    }
+
+    if (j->timer.time >= NEW_JOB_TIME && j->current_job.status == INACTIVE) {
         j->create_job = true;
         j->timer.time = 0.0f;
     } 
@@ -518,14 +593,23 @@ void load_drop_images(GameState* g)
     drop_array[IVY]   = (Rectangle) {.x = 128.0f, .y = 64.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
 }
 
+void update_ui_elements(GameState* g)
+{
+    if (g->jobs.current_job.status == OFFERED) {
+        g->ui.offer.accept_percent = (JOB_ACCEPT_TIME - g->jobs.timer.time) / JOB_ACCEPT_TIME; 
+    } else {
+        g->ui.offer.accept_percent = 1.0f;
+    }
+}
+
 void draw_display_ui(GameState* g)
 {
-    DrawRectangleRec(g->inventory.space, (Color) {10, 10, 10, 125});
-
     Texture2D sheet = g->sprites.spritesheet;
     Rectangle* drop_images = g->sprites.drop_source; 
-    Inventory inventory = g->inventory;
+
+    Inventory inventory = g->ui.inventory;
     Rectangle inv_shape = inventory.slot_size;
+    DrawRectangleRec(g->ui.inventory.space, (Color) {10, 10, 10, 125});
     for (int i = 0; i < INVENTORY_SLOTS; i++) {
         Drop d = inventory.slots[i];
         DrawTexturePro(sheet, drop_images[d], inv_shape, (Vector2){0,0}, 0.0f, WHITE);
@@ -534,6 +618,25 @@ void draw_display_ui(GameState* g)
             inv_shape.y += inv_shape.height;
             inv_shape.x = inventory.slot_size.x;
         }
+    }
+
+    Job current_job = g->jobs.current_job;
+    if (current_job.status == OFFERED) {
+        DrawRectangleRec(g->ui.offer.space, (Color) {10, 50, 10, 50});
+        Rectangle offer_shape = g->ui.offer.slot_size;
+        DrawTextEx(g->game_font, "$$$100.00",g->ui.offer.reward_pos, 48, 2, YELLOW);
+        for (int i = 0; i < 3; i++) {
+            Drop d = current_job.requirements[i];
+            if (d != NONE) {
+                DrawTexturePro(sheet, drop_images[d], offer_shape, (Vector2){0,0}, 0.0f, WHITE);
+                offer_shape.x += offer_shape.width;
+            }
+        }
+        DrawRectangleLinesEx(g->ui.offer.accept_button.shape, 3.0f, (Color){0,0,100,255});
+        Rectangle accept = g->ui.offer.accept_button.shape;
+        accept.width = g->ui.offer.accept_percent * g->ui.offer.accept_button.shape.width;
+        DrawTextEx(g->game_font, "ACCEPT?",g->ui.offer.accept_button.accept_text_pos, 32, 2, YELLOW);
+        DrawRectangleRounded(accept,0.5f, 5, (Color){0,0,100,100});
     }
 }
 
@@ -548,9 +651,9 @@ int main (int argc, char *argv[])
     SetTextureFilter(screen.texture, TEXTURE_FILTER_POINT);
 
     create_entities(entities);
-    reset_game(&game);
     game.sprites.spritesheet = LoadTexture("assets/spritesheet.png");
     game.game_font = LoadFont("assets/fonts/Kobata-Bold.otf");
+    reset_game(&game);
     SetTextureFilter(game.sprites.spritesheet, TEXTURE_FILTER_POINT);
     load_sprite_sources(&game);
     load_drop_images(&game);
