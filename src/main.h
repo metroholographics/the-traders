@@ -3,13 +3,26 @@
 
 #define WIDTH 320
 #define HEIGHT 240
-#define SCALE 4
+#define SCREEN_WIDTH 1280
+#define SCREEN_HEIGHT 960
+#define SCALE (SCREEN_WIDTH / WIDTH)
 #define G_WIDTH (WIDTH * SCALE)
 #define G_HEIGHT (HEIGHT * SCALE)
 
-#define P_WHITE (Color) {254, 246, 221, 255}
-#define P_BLACK (Color) { 13,  28,  36, 255}
-#define P_RED   (Color) {151,  59,  57, 255}
+#define P_WHITE      (Color) {254, 246, 221, 255}
+#define P_BLACK      (Color) { 13,  28,  36, 255}
+#define P_RED        (Color) {151,  59,  57, 255}
+#define P_LIGHTGRAY  (Color) {148, 142, 149, 255}
+#define P_GRAY       (Color) {125, 132, 159, 255}
+#define P_DARKGRAY   (Color) { 26,  43,  45, 255}
+#define P_LIGHTGREEN (Color) { 39, 133,  75, 255}
+#define P_GREEN      (Color) { 36, 106,  68, 255}
+#define P_DARKGREEN  (Color) { 34,  74,  61, 255}
+#define P_LIGHTOLIVE (Color) {167, 165,  81, 255}
+#define P_OLIVE      (Color) {130, 150,  75, 255}
+#define P_DARKOLIVE  (Color) { 93, 136,  82, 255}
+
+#define P_YELLOW     (Color) {217, 176,  46, 255}
 
 #define ROWS 12
 #define COLS 16
@@ -165,6 +178,7 @@ typedef struct job {
     Drop requirements[3];
     int amount[3];
     int in_inventory[3];
+    bool complete[3];
     int true_amount;
     float time_to_complete;
     float time_taken;
@@ -192,6 +206,7 @@ typedef struct game_state {
     Inventory inventory;
     Tile* selected_tile;
     Font game_font;
+    Font ui_font;
     bool debug_mode;
 } GameState;
 
@@ -225,6 +240,7 @@ bool handle_ui_clicks(Vector2 mouse_pos, GameState* g);
 bool mouse_in_rec(Vector2 mouse_pos, Rectangle rec);
 void set_entity_action_text(char* b, Entity e);
 Vector2 get_centered_text_rec(Font font, const char* t, Rectangle rec, int font_size, int font_spacing);
+void update_job_requirements(GameState* g, Job* j);
 
 #endif
 

@@ -31,6 +31,10 @@
 
 - Adding entities
 
+- Inventory
+    - There are two inventory sources. The game has an inventory_count[NUM_DROPS] array which has the amount of each game drop currently in inventory
+    - The ui has an inventory.slots which is the "bag", e.g., whats in the inventory currently.
+    - When adding to inventory, both get updated. The inventory_count provides easy access to index the amount of an item currently.
 - UI
     - When adding new UI, check to see if it needs to be added to the UI shapes rectangle.
         - This is the elements to see when checking if mouse is hovering a UI element
