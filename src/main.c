@@ -117,7 +117,6 @@ void reset_game(GameState* g)
     g->player = entities[PLAYER];
     g->player.pos[0] = 5;
     g->player.pos[1] = 5;
-
     g->stats = (Player_Stats) {
         .woodcut_dmg = 30
     };
@@ -185,6 +184,25 @@ void reset_game(GameState* g)
         .y = acc_centre_y - (0.5f * accept_text_size.y)
     };
     g->ui.shapes[JOB_ACCEPT_BUTTON] = g->ui.offer.accept_button.shape;
+
+    g->ui.active_job = (Accepted_Job){0};
+    g->ui.active_job.space = (Rectangle) {
+        .x = 0,
+        .y = (0.45f * ROWS) * GAME_TILE_HEIGHT,
+        .width = INV_WIDTH_FACTOR * G_WIDTH,
+        .height = 0.125f * G_HEIGHT 
+    };
+    g->ui.active_job.slot_size = (Rectangle) {
+        .x = g->ui.active_job.space.x + INV_INITIAL_OFFSET,
+        .y = g->ui.active_job.space.y + (0.18f * g->ui.active_job.space.height),
+    };
+    g->ui.active_job.slot_size.width = (g->ui.active_job.space.width / 3);
+    g->ui.active_job.slot_size.height = (g->ui.active_job.space.height - (0.25f * g->ui.active_job.space.height));
+    g->ui.active_job.reward_pos = (Vector2) {
+        .x = g->ui.active_job.space.x + INV_INITIAL_OFFSET,
+        .y = g->ui.active_job.space.y + INV_INITIAL_OFFSET
+    };
+    g->ui.shapes[JOB_ACTIVE] = g->ui.active_job.space;
 }
 
 void set_entity_action_text(char* b, Entity e)
@@ -195,19 +213,29 @@ void set_entity_action_text(char* b, Entity e)
             text = "cut?";
             break;
         }
-            
         case HARVEST: {
             text = "harvest?";
             break;
         }
         case EMPTY: {
-            text = "the land teems with overgrowth\n";
+            text = "the land teems with overgrowth";
             break;
         } 
         default:
             break;
     }
     snprintf(b, MAX_HOVER_TEXT_LEN, text);
+}
+
+Vector2 get_centered_text_rec(Font font, const char* t, Rectangle rec, int font_size, int font_spacing)
+{
+    Vector2 text_size = MeasureTextEx(font, t, font_size, font_spacing);
+    float rec_center_x = rec.x  + (0.5f * rec.width);
+    float rec_center_y = rec.y  + (0.5f * rec.height);
+    float text_x = rec_center_x - (0.5f * text_size.x);
+    float text_y = rec_center_y - (0.5f * text_size.y);
+
+    return (Vector2){text_x, text_y};
 }
 
 void set_hover_text(Hover_Text* t, char* msg, float time_limit)
@@ -233,26 +261,22 @@ void update_hover_text(Hover_Text* t)
             t->max_time = 0.0f;
         }
     }
+    //note: hover text is in screen space
+    Rectangle player_tile_rec = (Rectangle) {
+        .x = game.player.pos[0] * GAME_TILE_WIDTH,
+        .y = game.player.pos[1] * GAME_TILE_HEIGHT,
+        .width = GAME_TILE_WIDTH,
+        .height = GAME_TILE_HEIGHT,
+    };
+    Vector2 text_pos = get_centered_text_rec(game.game_font, t->string, player_tile_rec, FONT_SIZE, FONT_SPACING);
+    float y_offset = -0.5f;
+    if (game.player.pos[1] == 0) {
+         text_pos.y += (0.5f * TILE_HEIGHT);
+         y_offset *= -1;
+     }
 
-    Vector2 text_w = MeasureTextEx(game.game_font, t->string, FONT_SIZE, FONT_SPACING);
-
-    //note: hover text position is in worldspace
-    int player_x = game.player.pos[0];
-    int player_y = game.player.pos[1];
-
-    int centre_x = (player_x * GAME_TILE_WIDTH) + (0.5f * GAME_TILE_WIDTH); 
-
-    int text_x = centre_x - (0.5f * text_w.x);
-    int text_y = player_y * GAME_TILE_HEIGHT;
-    float y_offset = 0.125f;
-    if (player_y == 0) {
-        text_y += GAME_TILE_HEIGHT;
-        y_offset *= -1;
-    }
-
-    t->pos[0] = text_x;
-    t->pos[1] = text_y - (y_offset * GAME_TILE_HEIGHT);
-
+    t->pos[0] = text_pos.x;
+    t->pos[1] = text_pos.y + (y_offset * GAME_TILE_HEIGHT);
 }
 
 
@@ -283,6 +307,9 @@ bool handle_ui_clicks(Vector2 mouse_pos, GameState* g) {
                 set_hover_text(&g->hover_text,"Got a new payload...", 2.0f);
                 return true;
             }
+            break;
+        case JOB_ACTIVE:
+            if (job_status == ACCEPTED) return true;
             break;
         case NUM_UI_ELEMENTS:
             break;
@@ -493,8 +520,7 @@ void add_to_inventory(Drop drop, GameState* g)
     }
 
     if (i == INVENTORY_SLOTS) {
-        set_hover_text(&g->hover_text, "My bag is full!", 0.75f);
-        //printf("inventory full - handle this\n");
+        set_hover_text(&g->hover_text, "My bag is full!", 1.0f);
         g->inventory_count[drop] -= 1;
     }
 }
@@ -608,6 +634,7 @@ void create_job(Job_Manager* j)
             int amount = GetRandomValue(1, 10); //::todo: tier this somehow based on drop rarity
             job.requirements[0] = to_add;
             job.amount[0] = amount;
+            job.in_inventory[0] = 0;
             job.true_amount += amount;
             first_drop = to_add;
         }
@@ -618,6 +645,7 @@ void create_job(Job_Manager* j)
             int amount = GetRandomValue(1, 10);
             job.requirements[1] = to_add;
             job.amount[1] = amount;
+            job.in_inventory[1] = 0;
             job.true_amount += amount;
             second_drop = to_add;
         }
@@ -631,8 +659,6 @@ void create_job(Job_Manager* j)
 
     j->current_job = job; 
 }
-
-
 
 void load_sprite_sources(GameState* g)
 {
@@ -671,7 +697,7 @@ void draw_display_ui(GameState* g)
 
     Inventory inventory = g->ui.inventory;
     Rectangle inv_shape = inventory.slot_size;
-    DrawRectangleRec(g->ui.inventory.space, (Color) {10, 10, 10, 255});
+    DrawRectangleRec(g->ui.inventory.space, P_BLACK);
     for (int i = 0; i < INVENTORY_SLOTS; i++) {
         Drop d = inventory.slots[i];
         DrawTexturePro(sheet, drop_images[d], inv_shape, (Vector2){0,0}, 0.0f, WHITE);
@@ -684,13 +710,13 @@ void draw_display_ui(GameState* g)
 
     Job current_job = g->jobs.current_job;
     if (current_job.status == OFFERED) {
-        DrawRectangleRec(g->ui.offer.space, (Color) {10, 50, 10, 50});
+        DrawRectangleRec(g->ui.offer.space, P_BLACK);
         Rectangle offer_shape = g->ui.offer.slot_size;
-        DrawTextEx(g->game_font, "$$$100.00",g->ui.offer.reward_pos, 48, 2, YELLOW);
+        DrawTextEx(g->game_font, "$0000.00",g->ui.offer.reward_pos, 48, 2, YELLOW);
         for (int i = 0; i < 3; i++) {
             Drop d = current_job.requirements[i];
             if (d != NONE) {
-                DrawTexturePro(sheet, drop_images[d], offer_shape, (Vector2){0,0}, 0.0f, WHITE);
+                DrawTexturePro(sheet, drop_images[d], offer_shape, (Vector2){0,0}, 0.0f, P_WHITE);
                 offer_shape.x += offer_shape.width;
             }
         }
@@ -698,9 +724,29 @@ void draw_display_ui(GameState* g)
         Rectangle accept = g->ui.offer.accept_button.shape;
         accept.width = g->ui.offer.accept_percent * g->ui.offer.accept_button.shape.width;
         DrawTextEx(g->game_font, "ACCEPT?",g->ui.offer.accept_button.accept_text_pos, 32, 2, YELLOW);
-        DrawRectangleRounded(accept,0.5f, 5, (Color){0,0,100,100});
+        DrawRectangleRec(accept, (Color){0,0,100,100});
+    }
+
+    if (current_job.status == ACCEPTED) {
+        DrawRectangleRec(g->ui.active_job.space, P_BLACK);
+        Rectangle job_req_size = g->ui.active_job.slot_size;
+        DrawTextEx(g->game_font, "Payout: $0000.00",g->ui.active_job.reward_pos, 30, 2, YELLOW);
+
+        for (int i = 0; i < 3; i++) {
+            Drop d = current_job.requirements[i];
+            if (d != NONE) {
+                DrawTexturePro(sheet, drop_images[d], job_req_size, (Vector2){0,0}, 0.0f, P_WHITE);
+                char buffer[10];
+                snprintf(buffer, 10, "%0d/%0d", current_job.in_inventory[i], current_job.amount[i]);
+                Vector2 pos = get_centered_text_rec(g->game_font, buffer, job_req_size, 24, 2);
+                pos.y += (0.4f * job_req_size.height);
+                DrawTextEx(g->game_font,buffer, pos, 28, 2, P_WHITE);
+                job_req_size.x += job_req_size.width;
+            }
+        }
     }
 }
+
 
 int main (int argc, char *argv[])
 {
@@ -727,7 +773,7 @@ int main (int argc, char *argv[])
         update_game(&game);
     //Drawing to 320x240 render texture
         BeginTextureMode(screen);
-            ClearBackground(BLACK);
+            ClearBackground(P_BLACK);
             for (int i = 0; i < ROWS; i++) {
                 for (int j = 0; j < COLS; j++) {
                     Map m = game.maps[0]; 
@@ -763,7 +809,7 @@ int main (int argc, char *argv[])
                         }
                             break;
                         default:
-                            DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, BLACK);
+                            DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, P_BLACK);
                     }
                 }
             }
@@ -784,7 +830,7 @@ int main (int argc, char *argv[])
 
         //Drawing to frame buffer
         BeginDrawing();
-            ClearBackground(BLACK);
+            ClearBackground(P_BLACK);
             DrawTexturePro(
                 screen.texture,
                 (Rectangle){0, 0, WIDTH, -HEIGHT},
@@ -793,14 +839,15 @@ int main (int argc, char *argv[])
                 0.0f,
                 WHITE
             );
-            if (game.hover_text.active) {
-                Hover_Text t = game.hover_text;
-                DrawTextEx(game.game_font, t.string,(Vector2){t.pos[0], t.pos[1]}, FONT_SIZE, FONT_SPACING, P_WHITE);
-            }
+
             draw_display_ui(&game);
             if (game.debug_mode) {
                 DrawTextEx(game.game_font, "Debug",(Vector2) {10, 10}, 48, FONT_SPACING, P_RED);
                 DrawFPS(100, 10);
+            }
+            if (game.hover_text.active) {
+                Hover_Text t = game.hover_text;
+                DrawTextEx(game.game_font, t.string,(Vector2){t.pos[0], t.pos[1]}, FONT_SIZE, FONT_SPACING, P_WHITE);
             }
         EndDrawing();
     }

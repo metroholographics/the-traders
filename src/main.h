@@ -8,7 +8,8 @@
 #define G_HEIGHT (HEIGHT * SCALE)
 
 #define P_WHITE (Color) {254, 246, 221, 255}
-#define P_RED (Color) {225, 32, 45, 255}
+#define P_BLACK (Color) { 13,  28,  36, 255}
+#define P_RED   (Color) {151,  59,  57, 255}
 
 #define ROWS 12
 #define COLS 16
@@ -70,6 +71,7 @@ typedef enum {
     INVENTORY = 0,
     JOB_OFFER,
     JOB_ACCEPT_BUTTON,
+    JOB_ACTIVE,
     NUM_UI_ELEMENTS,
 } UI_ELEMENTS;
 
@@ -146,15 +148,23 @@ typedef struct job_offer {
     Vector2 estimate_pos;
 } Job_Offer;
 
+typedef struct accepted_job {
+    Rectangle space;
+    Rectangle slot_size;
+    Vector2 reward_pos;
+} Accepted_Job;
+
 typedef struct ui {
     Inventory inventory;
     Job_Offer offer;
+    Accepted_Job active_job;
     Rectangle shapes[NUM_UI_ELEMENTS];
 } UI;
 
 typedef struct job {
     Drop requirements[3];
     int amount[3];
+    int in_inventory[3];
     int true_amount;
     float time_to_complete;
     float time_taken;
@@ -214,7 +224,7 @@ void update_ui_elements(GameState* g);
 bool handle_ui_clicks(Vector2 mouse_pos, GameState* g);
 bool mouse_in_rec(Vector2 mouse_pos, Rectangle rec);
 void set_entity_action_text(char* b, Entity e);
+Vector2 get_centered_text_rec(Font font, const char* t, Rectangle rec, int font_size, int font_spacing);
 
 #endif
-
 
