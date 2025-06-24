@@ -26,8 +26,8 @@ bool tile_in_bounds(int x, int y)
 
 Vector2 screen_to_world(int x, int y)
 {
-    int world_x = x / SCALE;
-    int world_y = y / SCALE;
+    float world_x = x / (G_WIDTH / WIDTH);
+    float world_y = y / (G_HEIGHT / HEIGHT);
     return (Vector2) {world_x, world_y};
 }
 
@@ -99,6 +99,12 @@ void create_entities(Entity* e)
         .action_rate = 1.0f,
         .growth_per_tick = 15
     };
+    e[SHOP] = (Entity) {0};
+    e[SHOP] = (Entity) {
+        .type = SHOP,
+        .walkable = false,
+        .action = SELL,
+    };
 
 }
 
@@ -125,13 +131,14 @@ void reset_game(GameState* g)
 
     g->maps[0] = empty_map();
     g->current_map = &g->maps[0];
-    g->current_map->tiles[5][3] = create_tile(TREE, STUMP, 5, 3);
-    g->current_map->tiles[7][4] = create_tile(RUIN, CLEAN_RUIN, 7, 4);
-    g->current_map->tiles[2][10] = create_tile(RUIN, CLEAN_RUIN, 2, 10);
+    g->current_map->tiles[5][3]  = create_tile(TREE, STUMP, 5, 3);
+    g->current_map->tiles[7][4]  = create_tile(RUIN, CLEAN_RUIN, 7, 4);
+    g->current_map->tiles[2][9] = create_tile(RUIN, CLEAN_RUIN, 2, 10);
     g->current_map->tiles[10][8] = create_tile(TREE, STUMP, 10, 8);
     g->current_map->tiles[11][8] = create_tile(TREE, STUMP, 11, 8);
     g->current_map->tiles[10][5] = create_tile(TREE, STUMP, 10, 5);
     g->current_map->tiles[11][7] = create_tile(TREE, STUMP, 11, 7);
+    g->current_map->tiles[14][1] = create_tile(SHOP, EMPTY, 14, 1);
     g->selected_tile = NULL;
     g->debug_mode = false;
     g->hover_text = (Hover_Text) {0};
@@ -211,7 +218,11 @@ void set_entity_action_text(char* b, Entity e)
             text = "harvest?";
             break;
         }
-        case EMPTY: {
+        case SELL: {
+            text = "sell?";
+            break;
+        }
+        case NO_ACTION: {
             text = "the land teems with overgrowth";
             break;
         } 
@@ -683,7 +694,7 @@ void load_sprite_sources(GameState* g)
     src_array[GRASS]  = (Rectangle) {.x = 96.0f,  .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
     src_array[RUIN]   = (Rectangle) {.x = 128.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
     src_array[CLEAN_RUIN] = (Rectangle) {.x = 128.0f, .y = 32.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
-
+    src_array[SHOP]   = (Rectangle) {.x = 256.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
 }
 
 void load_drop_images(GameState* g)
@@ -767,15 +778,22 @@ void draw_display_ui(GameState* g)
 int main (int argc, char *argv[])
 {
     (void)argc; (void)argv;
-
     InitWindow(G_WIDTH, G_HEIGHT, "the traders");
+
     SetTargetFPS(60);
 
     RenderTexture2D screen = LoadRenderTexture(WIDTH, HEIGHT);
     SetTextureFilter(screen.texture, TEXTURE_FILTER_POINT);
+    SetTextureWrap(screen.texture, TEXTURE_WRAP_CLAMP);
 
     create_entities(entities);
-    game.sprites.spritesheet = LoadTexture("assets/spritesheet.png");
+    Image img = LoadImage("assets/spritesheet.png");
+    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    Texture2D tex = LoadTextureFromImage(img);
+    UnloadImage(img);
+    game.sprites.spritesheet = tex;
+
+
     game.game_font = LoadFont("assets/fonts/Kobata-Bold.otf");
     //game.ui_font   = LoadFont("assets/fonts/3270-Regular.otf");
     game.ui_font   = LoadFont("assets/fonts/Kobata-Regular.otf");
@@ -791,7 +809,7 @@ int main (int argc, char *argv[])
         update_game(&game);
     //Drawing to 320x240 render texture
         BeginTextureMode(screen);
-            ClearBackground(P_BLACK);
+            ClearBackground(BLANK);
             for (int i = 0; i < ROWS; i++) {
                 for (int j = 0; j < COLS; j++) {
                     Map m = game.maps[0]; 
@@ -801,9 +819,14 @@ int main (int argc, char *argv[])
                     //DrawRectangleLines(dest.x, dest.y, dest.width, dest.height, RED);
                     switch (m_entity.entity.type) {
                         case EMPTY:
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, P_WHITE);
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
+                            break;
+                        case SHOP:
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[SHOP], dest, dest_vec, 0.0f, WHITE);
                             break;
                         case TREE: {
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
                             float height_factor = m_entity.entity.health / 100.0f;
                             float chop = 1.0f - height_factor;
                             Rectangle source = game.sprites.source[TREE];
@@ -811,30 +834,35 @@ int main (int argc, char *argv[])
                             source.height =  height_factor * SPRITE_SIZE;
                             dest.y = ((float) i * TILE_HEIGHT) + (chop * TILE_WIDTH);
                             dest.height = height_factor * TILE_HEIGHT;
-                            DrawTexturePro(game.sprites.spritesheet, source, dest, dest_vec, 0.0f, P_WHITE);
-                        }
+                            
+                            DrawTexturePro(game.sprites.spritesheet, source, dest, dest_vec, 0.0f, WHITE);
                             break;
+                        }
                         case RUIN: {
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[RUIN], dest, dest_vec, 0.0f, P_WHITE);
-                        }
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[RUIN], dest, dest_vec, 0.0f, WHITE);
                             break;
+                        }
                         case CLEAN_RUIN: {
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[CLEAN_RUIN], dest, dest_vec, 0.0f, P_WHITE);
-                        }
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[CLEAN_RUIN], dest, dest_vec, 0.0f, WHITE);
                             break;
+                        }
                         case STUMP: {
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[STUMP], dest, dest_vec, 0.0f, P_WHITE);
-                        }
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[STUMP], dest, dest_vec, 0.0f, WHITE);
                             break;
+                        }
                         default:
-                            DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, P_BLACK);
+                            //DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, BLACK);
+                            break;
                     }
                 }
             }
             
             Entity p = game.player;
             Rectangle dest_rect = (Rectangle) {.x = p.pos[0] * TILE_WIDTH, .y = p.pos[1] * TILE_HEIGHT, .width = TILE_WIDTH, .height = TILE_HEIGHT};
-            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[PLAYER], dest_rect, (Vector2) {0,0}, 0.0f, P_WHITE);
+            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[PLAYER], dest_rect, (Vector2) {0,0}, 0.0f, WHITE);
 
             if (game.selected_tile != NULL) {
                 Entity selected = game.selected_tile->entity;
@@ -842,13 +870,11 @@ int main (int argc, char *argv[])
                 int select_y = selected.pos[1];
                 DrawCircle(select_x * TILE_WIDTH + HALF_TILE_WIDTH, select_y * TILE_HEIGHT + HALF_TILE_HEIGHT, FONT_SPACING, WHITE);
             }
-
-            
         EndTextureMode();
 
         //Drawing to frame buffer
         BeginDrawing();
-            ClearBackground(P_BLACK);
+            ClearBackground(BLANK);
             DrawTexturePro(
                 screen.texture,
                 (Rectangle){0, 0, WIDTH, -HEIGHT},

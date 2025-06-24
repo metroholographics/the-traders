@@ -1,13 +1,13 @@
 #ifndef MAIN_H
 #define MAIN_H
 
-#define WIDTH 320
-#define HEIGHT 240
+#define WIDTH 480
+#define HEIGHT 320
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 960
 #define SCALE (SCREEN_WIDTH / WIDTH)
-#define G_WIDTH (WIDTH * SCALE)
-#define G_HEIGHT (HEIGHT * SCALE)
+#define G_WIDTH 1440//(WIDTH * SCALE)
+#define G_HEIGHT 960//(HEIGHT * SCALE)
 
 #define P_WHITE      (Color) {254, 246, 221, 255}
 #define P_BLACK      (Color) { 13,  28,  36, 255}
@@ -24,8 +24,8 @@
 
 #define P_YELLOW     (Color) {217, 176,  46, 255}
 
-#define ROWS 12
-#define COLS 16
+#define ROWS 10
+#define COLS 15
 #define TILE_WIDTH (float) (WIDTH / COLS)
 #define HALF_TILE_WIDTH (float) (TILE_WIDTH * 0.5f)
 #define TILE_HEIGHT (float) (HEIGHT / ROWS)
@@ -56,6 +56,7 @@ typedef enum {
     GRASS,
     RUIN,
     CLEAN_RUIN,
+    SHOP,
     NUM_ENTITY_TYPES
 } Entity_Type;
 
@@ -71,6 +72,7 @@ typedef enum {
     CUT,
     GROW,
     HARVEST,
+    SELL,
     NUM_ACTIONS
 } Action;
 
