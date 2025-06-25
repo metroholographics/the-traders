@@ -45,8 +45,11 @@
 #define INV_WIDTH_FACTOR 0.25f
 #define OFFER_Y_FACTOR 0.0f
 
-#define NEW_JOB_TIME 2.0f
+#define NEW_JOB_TIME 3.0f
 #define JOB_ACCEPT_TIME 5.0f
+#define SELL_TIMER_MAX 0.5f
+#define SELL_TIMER_MIN 0.2f
+#define SELL_TIME_FACTOR 0.8f
 
 typedef enum {
     EMPTY = 0,
@@ -92,6 +95,9 @@ typedef enum {
 
 typedef struct Timer {
     float time;
+    float trigger_time;
+    float max_time;
+    float min_time;
 } Timer;
 
 typedef struct Entity {
@@ -190,6 +196,7 @@ typedef struct job {
 
 typedef struct job_manager {
     Timer timer;
+    Timer sell_timer;
     bool create_job;
     Job current_job;
     Job next_job;
@@ -205,7 +212,6 @@ typedef struct game_state {
     Sprites sprites;
     Hover_Text hover_text;
     UI ui;
-    Inventory inventory;
     Tile* selected_tile;
     Font game_font;
     Font ui_font;
@@ -223,6 +229,7 @@ Tile* get_selected_tile(Map* m);
 void register_action(Entity* p, Tile* target);
 bool tile_in_bounds(int x, int y);
 void handle_action(Entity* p);
+void end_action(Entity* p);
 void cut_target(Entity* p, Entity* t);
 void harvest_target(Entity* p, Entity* t);
 void add_to_map_queue(Map* m, int x, int y);
@@ -234,6 +241,7 @@ void set_hover_text(Hover_Text* t, char* msg, float time_limit);
 void update_hover_text(Hover_Text* t);
 void load_drop_images(GameState* g);
 void add_to_inventory(Drop drop, GameState* g);
+void remove_from_inventory(Drop d, int* state_inventory, Inventory* ui_inventory);
 void draw_display_ui(GameState* g);
 void tick_job_queue(Job_Manager* j);
 void create_job(Job_Manager* j); 
@@ -243,6 +251,9 @@ bool mouse_in_rec(Vector2 mouse_pos, Rectangle rec);
 void set_entity_action_text(char* b, Entity e);
 Vector2 get_centered_text_rec(Font font, const char* t, Rectangle rec, int font_size, int font_spacing);
 void update_job_requirements(GameState* g, Job* j);
+void sell_job_items(Entity* p, Entity* shop);
+bool check_job_complete(Job* j);
+void accept_job(Job_Manager* jm);
 
 #endif
 

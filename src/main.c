@@ -97,7 +97,7 @@ void create_entities(Entity* e)
         .max_health = 50,
         .health = 0,
         .action_rate = 1.0f,
-        .growth_per_tick = 15
+        .growth_per_tick = 20
     };
     e[SHOP] = (Entity) {0};
     e[SHOP] = (Entity) {
@@ -128,12 +128,14 @@ void reset_game(GameState* g)
     };
 
     g->jobs = (Job_Manager) {0};
+    g->jobs.sell_timer.max_time = SELL_TIMER_MAX;
+    g->jobs.sell_timer.min_time = SELL_TIMER_MIN;
 
     g->maps[0] = empty_map();
     g->current_map = &g->maps[0];
     g->current_map->tiles[5][3]  = create_tile(TREE, STUMP, 5, 3);
     g->current_map->tiles[7][4]  = create_tile(RUIN, CLEAN_RUIN, 7, 4);
-    g->current_map->tiles[2][9] = create_tile(RUIN, CLEAN_RUIN, 2, 10);
+    g->current_map->tiles[9][4]  = create_tile(RUIN, CLEAN_RUIN, 9, 4);
     g->current_map->tiles[10][8] = create_tile(TREE, STUMP, 10, 8);
     g->current_map->tiles[11][8] = create_tile(TREE, STUMP, 11, 8);
     g->current_map->tiles[10][5] = create_tile(TREE, STUMP, 10, 5);
@@ -307,8 +309,7 @@ bool handle_ui_clicks(Vector2 mouse_pos, GameState* g) {
             break;
         case JOB_ACCEPT_BUTTON:
             if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && job_status == OFFERED) {
-                g->jobs.current_job.status = ACCEPTED;
-                g->jobs.timer.time = 0.0f;
+                accept_job(&g->jobs);
                 set_hover_text(&g->hover_text,"Got a new payload...", 2.0f);
                 return true;
             }
@@ -405,8 +406,8 @@ void register_action(Entity* p, Tile* target)
                 game.hover_text.active = true;
                 set_hover_text(&game.hover_text, "I'm too far...", 1.0f);
             }
-        }
             break;
+        }
         case HARVEST: {
             if (entities_adjacent(*p, target->entity)) {
                 p->action = HARVEST;
@@ -415,8 +416,18 @@ void register_action(Entity* p, Tile* target)
                 game.hover_text.active = true;
                 set_hover_text(&game.hover_text, "I'm too far...", 1.0f);
             }
-        }
             break;
+        }
+        case SELL: {
+            if (entities_adjacent(*p, target->entity)) {
+                p->action = SELL;
+                p->target = &target->entity;
+            } else {
+                game.hover_text.active = true;
+                set_hover_text(&game.hover_text, "I'm too far...", 1.0f);
+            }
+            break;
+        }
         default:
             break;
     }
@@ -429,17 +440,91 @@ void handle_action(Entity* p)
 
     switch (action) {
         case CUT: {
-                cut_target(p, p->target);
-            } 
+            cut_target(p, p->target);
             break;
+        } 
         case HARVEST: {
-                harvest_target(p, p->target);
-            }
+            harvest_target(p, p->target);
             break;
+        }
+        case SELL: {
+            sell_job_items(p, p->target);
+            break;
+        }
         default:
             break;
     }
 }
+
+void end_action(Entity* p)
+{
+    p->action = NO_ACTION;
+    p->target = NULL;
+}
+
+void sell_job_items(Entity* p, Entity* shop) {
+    Job_Manager* jm = &game.jobs;
+    Job* job = &game.jobs.current_job;
+    if (job->status != ACCEPTED) {
+        p->action = NO_ACTION;
+        p->target = NULL;
+        set_hover_text(&game.hover_text, "sell what? to who?", 1.0f);
+        return;
+    }
+
+    if (!check_job_complete(job)) {
+        p->action = NO_ACTION;
+        p->target = NULL;
+        set_hover_text(&game.hover_text, "the job isn't done...", 1.0f);
+        return;
+    }
+    //job accepted and complete at this stage
+    jm->sell_timer.time += GetFrameTime();
+    if (jm->sell_timer.time >= jm->sell_timer.trigger_time) {
+        for (int i = 0; i < 3; i++) {
+            Drop d = job->requirements[i]; //this is the drop in the requirement
+            if (d == NONE) continue;
+            int amount = job->amount[i]; // this is the amount we need to finish the job
+            if (amount > 0) {
+                job->amount[i]--;
+                job->in_inventory[i]--;
+                job->true_amount--;
+                remove_from_inventory(d, game.inventory_count, &game.ui.inventory);
+                break;
+            }
+        }
+        jm->sell_timer.trigger_time *= SELL_TIME_FACTOR;
+        if (jm->sell_timer.trigger_time < jm->sell_timer.trigger_time) {
+            jm->sell_timer.trigger_time = jm->sell_timer.min_time;
+        }
+        jm->sell_timer.time = 0.0f;
+    }
+
+    if (job->true_amount == 0) {
+        jm->timer.time = 0.0f;
+        job->status = INACTIVE;
+        end_action(p);
+    }
+}
+
+void remove_from_inventory(Drop d, int* state_inventory, Inventory* ui_inventory)
+{
+    state_inventory[d]--;
+    for (int i = 0; i < INVENTORY_SLOTS; i++) {
+        if (ui_inventory->slots[i] == d) {
+            ui_inventory->slots[i] = NONE;
+            break;
+        }
+    }
+}
+
+bool check_job_complete(Job* j)
+{
+    if (j->status != ACCEPTED) return false;
+
+    return (j->complete[0] && j->complete[1] && j->complete[2]);
+}
+
 
 bool entities_adjacent(Entity e, Entity target)
 {
@@ -480,8 +565,7 @@ void cut_target(Entity* p, Entity* t)
             tile_x, tile_y
         );
         add_to_map_queue(game.current_map, tile_x, tile_y);
-        p->action = NO_ACTION; 
-        p->target = NULL;
+        end_action(p);
         add_to_inventory(LOG, &game); 
     }
 }
@@ -504,8 +588,7 @@ void harvest_target(Entity* p, Entity* t)
             tile_x, tile_y
         );
         add_to_map_queue(game.current_map, tile_x, tile_y);
-        p->action = NO_ACTION; 
-        p->target = NULL;
+        end_action(p);
         add_to_inventory(IVY, &game); 
     }
 
@@ -529,7 +612,6 @@ void add_to_inventory(Drop drop, GameState* g)
         g->inventory_count[drop] -= 1;
     }
 }
-
 
 void add_to_map_queue(Map* m, int x, int y)
 {
@@ -620,7 +702,6 @@ void update_job_requirements(GameState* g, Job* j)
     }
 }
 
-
 void tick_job_queue(Job_Manager* j) 
 {
     j->timer.time += GetFrameTime();
@@ -670,7 +751,7 @@ void create_job(Job_Manager* j)
             job.amount[1] = amount;
             job.in_inventory[1] = 0;
             job.complete[1] = false;
-            job.true_amount += amount;
+            job.true_amount += amount; //::todo: make sure the true_amount never exceeds max num. of inventory slots
             second_drop = to_add;
         }
         if (i == 3 && chance <= 3) {
@@ -682,6 +763,15 @@ void create_job(Job_Manager* j)
     job.reward = 50;
 
     j->current_job = job; 
+}
+
+void accept_job(Job_Manager* jm)
+{
+    jm->current_job.status = ACCEPTED;
+    jm->timer.time = 0.0f;
+    jm->sell_timer.time = 0.0f;
+    jm->sell_timer.trigger_time = jm->sell_timer.max_time;
+    return;
 }
 
 void load_sprite_sources(GameState* g)
@@ -774,7 +864,6 @@ void draw_display_ui(GameState* g)
     }
 }
 
-
 int main (int argc, char *argv[])
 {
     (void)argc; (void)argv;
@@ -806,6 +895,7 @@ int main (int argc, char *argv[])
         if (IsKeyPressed(KEY_LEFT_CONTROL)) {
             game.debug_mode = !game.debug_mode;
         }
+        //printf("%f\n", GetFrameTime());
         update_game(&game);
     //Drawing to 320x240 render texture
         BeginTextureMode(screen);
@@ -816,7 +906,7 @@ int main (int argc, char *argv[])
                     Tile m_entity = m.tiles[j][i];
                     Rectangle dest = (Rectangle) {.x = (float)j * TILE_WIDTH, .y = (float)i * TILE_HEIGHT, .width = TILE_WIDTH, .height = TILE_HEIGHT};
                     Vector2 dest_vec = (Vector2) {0,0};
-                    //DrawRectangleLines(dest.x, dest.y, dest.width, dest.height, RED);
+                    
                     switch (m_entity.entity.type) {
                         case EMPTY:
                             DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
@@ -857,6 +947,8 @@ int main (int argc, char *argv[])
                             //DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, BLACK);
                             break;
                     }
+
+                    if (game.debug_mode) DrawRectangleLinesEx((Rectangle){dest.x, dest.y, dest.width, dest.height}, 0.5f, P_WHITE);
                 }
             }
             
