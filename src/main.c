@@ -1,8 +1,10 @@
 #include "raylib.h"
+#include "raymath.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 #include "main.h"
 
 GameState game;
@@ -105,7 +107,25 @@ void create_entities(Entity* e)
         .walkable = false,
         .action = SELL,
     };
-
+    e[ROCK] = (Entity){0};
+    e[ROCK] = (Entity) {
+        .type = ROCK,
+        .walkable = false,
+        .action = MINE,
+        .health = 100,
+        .action_rate = 1.0f,
+        .drop = ORE,
+    };
+    e[EMPTY_ROCK] = (Entity){0};
+    e[EMPTY_ROCK] = (Entity) {
+        .type = EMPTY_ROCK,
+        .walkable = false,
+        .action = GROW,
+        .max_health = 100,
+        .health = 0,
+        .action_rate = 1.0f,
+        .growth_per_tick = 30
+    };
 }
 
 Tile create_tile(Entity_Type current, Entity_Type previous, int x, int y)
@@ -124,8 +144,11 @@ void reset_game(GameState* g)
     g->player.pos[0] = 5;
     g->player.pos[1] = 5;
     g->stats = (Player_Stats) {
-        .woodcut_dmg = 30
+        .woodcut_dmg = 30,
+        .mine_dmg = 30
     };
+
+    g->physics_queue = (Physics_Queue) {0};
 
     g->jobs = (Job_Manager) {0};
     g->jobs.sell_timer.max_time = SELL_TIMER_MAX;
@@ -141,6 +164,7 @@ void reset_game(GameState* g)
     g->current_map->tiles[10][5] = create_tile(TREE, STUMP, 10, 5);
     g->current_map->tiles[11][7] = create_tile(TREE, STUMP, 11, 7);
     g->current_map->tiles[14][1] = create_tile(SHOP, EMPTY, 14, 1);
+    g->current_map->tiles[7][6]  = create_tile(ROCK, EMPTY_ROCK, 7, 6);
     g->selected_tile = NULL;
     g->debug_mode = false;
     g->hover_text = (Hover_Text) {0};
@@ -222,6 +246,10 @@ void set_entity_action_text(char* b, Entity e)
         }
         case SELL: {
             text = "sell?";
+            break;
+        }
+        case MINE: {
+            text = "mine?";
             break;
         }
         case NO_ACTION: {
@@ -418,6 +446,16 @@ void register_action(Entity* p, Tile* target)
             }
             break;
         }
+        case MINE: {
+            if (entities_adjacent(*p, target->entity)) {
+                p->action = MINE;
+                p->target = &target->entity;
+            } else {
+                game.hover_text.active = true;
+                set_hover_text(&game.hover_text, "I'm too far...", 1.0f);
+            }
+            break;
+        }
         case SELL: {
             if (entities_adjacent(*p, target->entity)) {
                 p->action = SELL;
@@ -445,6 +483,10 @@ void handle_action(Entity* p)
         } 
         case HARVEST: {
             harvest_target(p, p->target);
+            break;
+        }
+        case MINE: {
+            mine_target(p, p->target);
             break;
         }
         case SELL: {
@@ -490,6 +532,18 @@ void sell_job_items(Entity* p, Entity* shop) {
                 job->in_inventory[i]--;
                 job->true_amount--;
                 remove_from_inventory(d, game.inventory_count, &game.ui.inventory);
+                Physics_Object obj = (Physics_Object) {
+                    .active = true,
+                    .start_pos = (Vector2) {p->pos[0] * TILE_WIDTH, p->pos[1] * TILE_HEIGHT},
+                    .end_pos = (Vector2) {shop->pos[0] * TILE_WIDTH, shop->pos[1] * TILE_HEIGHT},
+                    .sprite_array = game.sprites.drop_source,
+                    .sprite_index = d,
+                    .time_to_travel = jm->sell_timer.trigger_time
+                };
+                Vector2 diff = Vector2Subtract(obj.end_pos, obj.start_pos);
+                obj.velocity = Vector2Scale(diff, 1.0f / obj.time_to_travel);
+                Rectangle s = (Rectangle) {.x = obj.start_pos.x, .y = obj.start_pos.y, .width = 16.0, .height = 16.0};
+                add_to_physics_queue(obj, s);
                 break;
             }
         }
@@ -525,7 +579,6 @@ bool check_job_complete(Job* j)
     return (j->complete[0] && j->complete[1] && j->complete[2]);
 }
 
-
 bool entities_adjacent(Entity e, Entity target)
 {
     int e_x = e.pos[0];
@@ -556,17 +609,17 @@ void cut_target(Entity* p, Entity* t)
     p->timer.time += GetFrameTime();
 
     if (t->health <= 15) {
+        add_to_inventory(t->drop, &game); 
         int tile_x = t->pos[0];
         int tile_y = t->pos[1];
-        Tile* t = &game.current_map->tiles[tile_x][tile_y];
-        *t = create_tile(
-            t->previous.type,
-            t->entity.type,
+        Tile* tile = &game.current_map->tiles[tile_x][tile_y];
+        *tile = create_tile(
+            tile->previous.type,
+            tile->entity.type,
             tile_x, tile_y
         );
         add_to_map_queue(game.current_map, tile_x, tile_y);
         end_action(p);
-        add_to_inventory(LOG, &game); 
     }
 }
 
@@ -579,17 +632,50 @@ void harvest_target(Entity* p, Entity* t)
     }
     p->timer.time += GetFrameTime();
     if (t->health <= 0) {
+        add_to_inventory(t->drop, &game); 
         int tile_x = t->pos[0];
         int tile_y = t->pos[1];
-        Tile* t = &game.current_map->tiles[tile_x][tile_y];
-        *t = create_tile(
-            t->previous.type,
-            t->entity.type,
+        Tile* tile = &game.current_map->tiles[tile_x][tile_y];
+        *tile = create_tile(
+            tile->previous.type,
+            tile->entity.type,
             tile_x, tile_y
         );
         add_to_map_queue(game.current_map, tile_x, tile_y);
         end_action(p);
-        add_to_inventory(IVY, &game); 
+    }
+
+    return;
+}
+
+void mine_target(Entity* p, Entity* t)
+{
+    float current_time = p->timer.time;
+    if (current_time > t->action_rate) p->timer.time = current_time = 0.0f;
+
+    if (fmod(current_time, 0.3) == 0) {
+        int chance = GetRandomValue(0,2);
+        if (chance == 2) {
+            add_to_inventory(t->drop, &game);
+        }
+    }
+    if (current_time == 0.0f) {
+        t->health -= game.stats.mine_dmg;
+    }
+    p->timer.time += GetFrameTime();
+
+    if (t->health <= 0) {
+        add_to_inventory(t->drop, &game); 
+        int tile_x = t->pos[0];
+        int tile_y = t->pos[1];
+        Tile* tile = &game.current_map->tiles[tile_x][tile_y];
+        *tile = create_tile(
+            tile->previous.type,
+            tile->entity.type,
+            tile_x, tile_y
+        );
+        add_to_map_queue(game.current_map, tile_x, tile_y);
+        end_action(p);
     }
 
     return;
@@ -687,8 +773,47 @@ void update_game(GameState* g)
     handle_input(&g->player);
     update_hover_text(&g->hover_text);
     handle_map_queue(g->current_map, &g->current_map->entity_queue);
+    handle_physics_queue(&g->physics_queue);
 
     update_ui_elements(g);
+}
+
+void add_to_physics_queue(Physics_Object obj, Rectangle shape)
+{
+    Physics_Queue* queue = &game.physics_queue;
+    obj.shape = shape;
+    if (queue->count > MAX_PHYSICS_OBJECTS) {
+        printf("ERROR: exceeded physics queue\n");
+        return;
+    }
+    for (int i = 0; i < MAX_PHYSICS_OBJECTS; i++) {
+        if (!queue->queue[i].active) {
+            queue->queue[i] = obj;
+            queue->count++;
+        }
+    }
+}
+
+void handle_physics_queue(Physics_Queue* queue)
+{
+    for (int i = 0; i < MAX_PHYSICS_OBJECTS; i++) {
+        Physics_Object* obj = &queue->queue[i];
+        if (!obj->active) continue;
+        float dt = GetFrameTime();
+        Vector2 curr_pos = (Vector2) {obj->shape.x, obj->shape.y};
+        Vector2 velocity_step = Vector2Scale(obj->velocity, dt);
+        Vector2 new_pos = Vector2Add(curr_pos, velocity_step);
+        Vector2 to_end_before = Vector2Subtract(obj->end_pos, curr_pos);
+        Vector2 to_end_after = Vector2Subtract(obj->end_pos, new_pos);
+        if (Vector2DotProduct(to_end_before, to_end_after) <= 0) {
+            // passed or exactly reached target
+            new_pos = obj->end_pos;
+            obj->active = false;
+            queue->count--;
+        }
+        obj->shape.x = new_pos.x;
+        obj->shape.y = new_pos.y;
+    }
 }
 
 void update_job_requirements(GameState* g, Job* j)
@@ -747,15 +872,29 @@ void create_job(Job_Manager* j)
                 to_add = GetRandomValue(1, NUM_DROPS - 1);
             } while (to_add == first_drop);
             int amount = GetRandomValue(1, 10);
+            if (job.true_amount + amount > INVENTORY_SLOTS) {
+                amount = INVENTORY_SLOTS - job.true_amount;
+            }
             job.requirements[1] = to_add;
             job.amount[1] = amount;
             job.in_inventory[1] = 0;
             job.complete[1] = false;
-            job.true_amount += amount; //::todo: make sure the true_amount never exceeds max num. of inventory slots
+            job.true_amount += amount;
             second_drop = to_add;
         }
-        if (i == 3 && chance <= 3) {
-            continue;
+        if (i == 2 && chance <= 3 && job.true_amount < INVENTORY_SLOTS) {
+            do {
+                to_add = GetRandomValue(1, NUM_DROPS - 1);
+            } while (to_add == first_drop || to_add == second_drop);
+            int amount = GetRandomValue(1, 10);
+            if (job.true_amount + amount > INVENTORY_SLOTS) {
+                amount = INVENTORY_SLOTS - job.true_amount;
+            }
+            job.requirements[2] = to_add;
+            job.amount[2] = amount;
+            job.in_inventory[2] = 0;
+            job.complete[2] = false;
+            job.true_amount += amount;
         }
     }
     //::todo: apply some logic to these
@@ -785,6 +924,8 @@ void load_sprite_sources(GameState* g)
     src_array[RUIN]   = (Rectangle) {.x = 128.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
     src_array[CLEAN_RUIN] = (Rectangle) {.x = 128.0f, .y = 32.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
     src_array[SHOP]   = (Rectangle) {.x = 256.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    src_array[ROCK]   = (Rectangle) {.x = 160.0f, .y = 0.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    src_array[EMPTY_ROCK] = (Rectangle) {.x = 160.0f, .y = 32.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
 }
 
 void load_drop_images(GameState* g)
@@ -793,6 +934,8 @@ void load_drop_images(GameState* g)
     drop_array[EMPTY] = (Rectangle) {0,0,0,0};
     drop_array[LOG]   = (Rectangle) {.x = 32.0f, .y = 32.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
     drop_array[IVY]   = (Rectangle) {.x = 128.0f, .y = 64.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    drop_array[ORE]   = (Rectangle) {.x = 160.0f, .y = 64.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+
 }
 
 void update_ui_elements(GameState* g)
@@ -943,6 +1086,16 @@ int main (int argc, char *argv[])
                             DrawTexturePro(game.sprites.spritesheet, game.sprites.source[STUMP], dest, dest_vec, 0.0f, WHITE);
                             break;
                         }
+                        case ROCK: {
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[ROCK], dest, dest_vec, 0.0f, WHITE);
+                            break;
+                        }
+                        case EMPTY_ROCK: {
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
+                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[EMPTY_ROCK], dest, dest_vec, 0.0f, WHITE);
+                            break;
+                        }
                         default:
                             //DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, BLACK);
                             break;
@@ -962,6 +1115,15 @@ int main (int argc, char *argv[])
                 int select_y = selected.pos[1];
                 DrawCircle(select_x * TILE_WIDTH + HALF_TILE_WIDTH, select_y * TILE_HEIGHT + HALF_TILE_HEIGHT, FONT_SPACING, WHITE);
             }
+
+            Physics_Object* q = game.physics_queue.queue;
+            for (int i = 0; i < MAX_PHYSICS_OBJECTS; i++) {
+                if (!q[i].active) {
+                    continue;
+                }
+                DrawTexturePro(game.sprites.spritesheet, q[i].sprite_array[q[i].sprite_index], q[i].shape, (Vector2){0,0}, 0.0f, WHITE);
+            }
+
         EndTextureMode();
 
         //Drawing to frame buffer

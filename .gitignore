@@ -1,3 +1,4 @@
 *.exe
 libs/
 .vscode/
+assets/*.pxc

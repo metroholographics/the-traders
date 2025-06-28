@@ -3,9 +3,6 @@
 
 #define WIDTH 480
 #define HEIGHT 320
-#define SCREEN_WIDTH 1280
-#define SCREEN_HEIGHT 960
-#define SCALE (SCREEN_WIDTH / WIDTH)
 #define G_WIDTH 1440//(WIDTH * SCALE)
 #define G_HEIGHT 960//(HEIGHT * SCALE)
 
@@ -39,6 +36,7 @@
 
 #define NUM_MAPS 1
 #define MAP_ENTITY_NUM (ROWS * COLS)
+#define MAX_PHYSICS_OBJECTS 64
 #define INVENTORY_SLOTS 16
 #define INV_INITIAL_OFFSET 3
 #define INV_Y_POS_FACTOR 0.58f
@@ -47,8 +45,8 @@
 
 #define NEW_JOB_TIME 3.0f
 #define JOB_ACCEPT_TIME 5.0f
-#define SELL_TIMER_MAX 0.5f
-#define SELL_TIMER_MIN 0.2f
+#define SELL_TIMER_MAX 1.0f
+#define SELL_TIMER_MIN 0.4f
 #define SELL_TIME_FACTOR 0.8f
 
 typedef enum {
@@ -60,6 +58,8 @@ typedef enum {
     RUIN,
     CLEAN_RUIN,
     SHOP,
+    ROCK,
+    EMPTY_ROCK,
     NUM_ENTITY_TYPES
 } Entity_Type;
 
@@ -67,6 +67,7 @@ typedef enum {
     NONE = 0,
     LOG,
     IVY,
+    ORE,
     NUM_DROPS
 } Drop;
 
@@ -75,6 +76,7 @@ typedef enum {
     CUT,
     GROW,
     HARVEST,
+    MINE,
     SELL,
     NUM_ACTIONS
 } Action;
@@ -138,6 +140,7 @@ typedef struct map {
 
 typedef struct player_stats {
     int woodcut_dmg;
+    int mine_dmg;
 } Player_Stats;
 
 typedef struct hover_text {
@@ -202,10 +205,27 @@ typedef struct job_manager {
     Job next_job;
 } Job_Manager;
 
+typedef struct physics_object {
+    bool active;
+    Rectangle shape;
+    Vector2 start_pos;
+    Vector2 end_pos;
+    Vector2 velocity;
+    float time_to_travel;
+    Rectangle* sprite_array;
+    int sprite_index;
+} Physics_Object;
+
+typedef struct physics_queue {
+    Physics_Object queue[MAX_PHYSICS_OBJECTS];
+    int count;
+} Physics_Queue;
+
 typedef struct game_state {
     Entity player;
     Player_Stats stats;
     int inventory_count[NUM_DROPS];
+    Physics_Queue physics_queue;
     Job_Manager jobs;
     Map maps[NUM_MAPS];
     Map* current_map;
@@ -232,6 +252,7 @@ void handle_action(Entity* p);
 void end_action(Entity* p);
 void cut_target(Entity* p, Entity* t);
 void harvest_target(Entity* p, Entity* t);
+void mine_target(Entity* p, Entity* t);
 void add_to_map_queue(Map* m, int x, int y);
 void handle_map_queue(Map* m, Entity_Queue* eq);
 void grow_entity(Map* m, Entity* e, int index);
@@ -254,6 +275,6 @@ void update_job_requirements(GameState* g, Job* j);
 void sell_job_items(Entity* p, Entity* shop);
 bool check_job_complete(Job* j);
 void accept_job(Job_Manager* jm);
-
+void add_to_physics_queue(Physics_Object obj, Rectangle shape);
+void handle_physics_queue(Physics_Queue* queue);
 #endif
-
