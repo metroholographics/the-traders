@@ -23,13 +23,13 @@
 
 #define ROWS 10
 #define COLS 15
-#define TILE_WIDTH (float) (WIDTH / COLS)
-#define HALF_TILE_WIDTH (float) (TILE_WIDTH * 0.5f)
-#define TILE_HEIGHT (float) (HEIGHT / ROWS)
-#define HALF_TILE_HEIGHT (float) (TILE_HEIGHT * 0.5f)
-#define GAME_TILE_WIDTH (float) (G_WIDTH / COLS)
-#define GAME_TILE_HEIGHT (float) (G_HEIGHT / ROWS)
-#define SPRITE_SIZE 32.0f
+#define TILE_WIDTH (WIDTH / COLS)
+#define HALF_TILE_WIDTH (TILE_WIDTH * 0.5f)
+#define TILE_HEIGHT (HEIGHT / ROWS)
+#define HALF_TILE_HEIGHT (TILE_HEIGHT * 0.5f)
+#define GAME_TILE_WIDTH (G_WIDTH / COLS)
+#define GAME_TILE_HEIGHT (G_HEIGHT / ROWS)
+#define SPRITE_SIZE 32
 #define MAX_HOVER_TEXT_LEN 64
 #define FONT_SIZE 26
 #define FONT_SPACING 2

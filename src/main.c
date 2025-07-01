@@ -223,7 +223,7 @@ void reset_game(GameState* g)
         .x = g->ui.active_job.space.x + INV_INITIAL_OFFSET,
         .y = g->ui.active_job.space.y + (0.18f * g->ui.active_job.space.height),
     };
-    g->ui.active_job.slot_size.width = (g->ui.active_job.space.width / 3);
+    g->ui.active_job.slot_size.width = (g->ui.active_job.space.width / 3) - INV_INITIAL_OFFSET;
     g->ui.active_job.slot_size.height = (g->ui.active_job.space.height - (0.25f * g->ui.active_job.space.height));
     g->ui.active_job.reward_pos = (Vector2) {
         .x = g->ui.active_job.space.x + INV_INITIAL_OFFSET,
@@ -508,15 +508,13 @@ void sell_job_items(Entity* p, Entity* shop) {
     Job_Manager* jm = &game.jobs;
     Job* job = &game.jobs.current_job;
     if (job->status != ACCEPTED) {
-        p->action = NO_ACTION;
-        p->target = NULL;
+        end_action(p);
         set_hover_text(&game.hover_text, "sell what? to who?", 1.0f);
         return;
     }
 
-    if (!check_job_complete(job)) {
-        p->action = NO_ACTION;
-        p->target = NULL;
+    if (!check_job_complete(job) && !(game.debug_mode)) {
+        end_action(p);
         set_hover_text(&game.hover_text, "the job isn't done...", 1.0f);
         return;
     }
@@ -533,22 +531,21 @@ void sell_job_items(Entity* p, Entity* shop) {
                 job->true_amount--;
                 remove_from_inventory(d, game.inventory_count, &game.ui.inventory);
                 Physics_Object obj = (Physics_Object) {
-                    .active = true,
                     .start_pos = (Vector2) {p->pos[0] * TILE_WIDTH, p->pos[1] * TILE_HEIGHT},
-                    .end_pos = (Vector2) {shop->pos[0] * TILE_WIDTH, shop->pos[1] * TILE_HEIGHT},
+                    .end_pos   = (Vector2) {shop->pos[0] * TILE_WIDTH, shop->pos[1] * TILE_HEIGHT},
                     .sprite_array = game.sprites.drop_source,
                     .sprite_index = d,
-                    .time_to_travel = jm->sell_timer.trigger_time
+                    .time_to_travel = jm->sell_timer.trigger_time * SELL_TIME_FACTOR
                 };
                 Vector2 diff = Vector2Subtract(obj.end_pos, obj.start_pos);
                 obj.velocity = Vector2Scale(diff, 1.0f / obj.time_to_travel);
-                Rectangle s = (Rectangle) {.x = obj.start_pos.x, .y = obj.start_pos.y, .width = 16.0, .height = 16.0};
+                Rectangle s = (Rectangle) {.x = obj.start_pos.x, .y = obj.start_pos.y, .width = 24, .height = 24};
                 add_to_physics_queue(obj, s);
                 break;
             }
         }
         jm->sell_timer.trigger_time *= SELL_TIME_FACTOR;
-        if (jm->sell_timer.trigger_time < jm->sell_timer.trigger_time) {
+        if (jm->sell_timer.trigger_time < jm->sell_timer.min_time) {
             jm->sell_timer.trigger_time = jm->sell_timer.min_time;
         }
         jm->sell_timer.time = 0.0f;
@@ -556,6 +553,8 @@ void sell_job_items(Entity* p, Entity* shop) {
 
     if (job->true_amount == 0) {
         jm->timer.time = 0.0f;
+        jm->sell_timer.time = 0.0f;
+        jm->sell_timer.trigger_time = jm->sell_timer.max_time;
         job->status = INACTIVE;
         end_action(p);
     }
@@ -772,9 +771,9 @@ void update_game(GameState* g)
     handle_action(&g->player);
     handle_input(&g->player);
     update_hover_text(&g->hover_text);
-    handle_map_queue(g->current_map, &g->current_map->entity_queue);
     handle_physics_queue(&g->physics_queue);
-
+    handle_map_queue(g->current_map, &g->current_map->entity_queue);
+    
     update_ui_elements(g);
 }
 
@@ -789,7 +788,9 @@ void add_to_physics_queue(Physics_Object obj, Rectangle shape)
     for (int i = 0; i < MAX_PHYSICS_OBJECTS; i++) {
         if (!queue->queue[i].active) {
             queue->queue[i] = obj;
+            queue->queue[i].active = true;
             queue->count++;
+            break;
         }
     }
 }
@@ -799,20 +800,22 @@ void handle_physics_queue(Physics_Queue* queue)
     for (int i = 0; i < MAX_PHYSICS_OBJECTS; i++) {
         Physics_Object* obj = &queue->queue[i];
         if (!obj->active) continue;
+
         float dt = GetFrameTime();
         Vector2 curr_pos = (Vector2) {obj->shape.x, obj->shape.y};
         Vector2 velocity_step = Vector2Scale(obj->velocity, dt);
         Vector2 new_pos = Vector2Add(curr_pos, velocity_step);
         Vector2 to_end_before = Vector2Subtract(obj->end_pos, curr_pos);
         Vector2 to_end_after = Vector2Subtract(obj->end_pos, new_pos);
+
         if (Vector2DotProduct(to_end_before, to_end_after) <= 0) {
             // passed or exactly reached target
             new_pos = obj->end_pos;
             obj->active = false;
             queue->count--;
         }
-        obj->shape.x = new_pos.x;
-        obj->shape.y = new_pos.y;
+        obj->shape.x = roundf(new_pos.x);
+        obj->shape.y = roundf(new_pos.y);
     }
 }
 
@@ -832,7 +835,8 @@ void tick_job_queue(Job_Manager* j)
     j->timer.time += GetFrameTime();
 
     if (j->current_job.status == OFFERED) {
-        if (j->timer.time >= JOB_ACCEPT_TIME) {
+        float accept_time = (game.debug_mode) ? 1.5f : JOB_ACCEPT_TIME;
+        if (j->timer.time >= accept_time) {
             j->timer.time = 0.0f;
             j->current_job.status = INACTIVE;
             return; //Job has been offered and not accepted - next frame, clock starts for new job offer
@@ -932,10 +936,9 @@ void load_drop_images(GameState* g)
 {
     Rectangle* drop_array = g->sprites.drop_source;
     drop_array[EMPTY] = (Rectangle) {0,0,0,0};
-    drop_array[LOG]   = (Rectangle) {.x = 32.0f, .y = 32.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
-    drop_array[IVY]   = (Rectangle) {.x = 128.0f, .y = 64.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
-    drop_array[ORE]   = (Rectangle) {.x = 160.0f, .y = 64.0f, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
-
+    drop_array[LOG]   = (Rectangle) {.x = 32,  .y = 32, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    drop_array[IVY]   = (Rectangle) {.x = 128, .y = 64, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
+    drop_array[ORE]   = (Rectangle) {.x = 160, .y = 64, .width = SPRITE_SIZE, .height = SPRITE_SIZE};
 }
 
 void update_ui_elements(GameState* g)
@@ -1017,20 +1020,18 @@ int main (int argc, char *argv[])
     RenderTexture2D screen = LoadRenderTexture(WIDTH, HEIGHT);
     SetTextureFilter(screen.texture, TEXTURE_FILTER_POINT);
     SetTextureWrap(screen.texture, TEXTURE_WRAP_CLAMP);
+    
 
     create_entities(entities);
-    Image img = LoadImage("assets/spritesheet.png");
-    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-    Texture2D tex = LoadTextureFromImage(img);
-    UnloadImage(img);
-    game.sprites.spritesheet = tex;
 
+    game.sprites.spritesheet = LoadTexture("assets/spritesheet.png");
+    SetTextureFilter(game.sprites.spritesheet, TEXTURE_FILTER_POINT);
+    SetTextureWrap(game.sprites.spritesheet, TEXTURE_WRAP_CLAMP);
 
     game.game_font = LoadFont("assets/fonts/Kobata-Bold.otf");
     //game.ui_font   = LoadFont("assets/fonts/3270-Regular.otf");
     game.ui_font   = LoadFont("assets/fonts/Kobata-Regular.otf");
     reset_game(&game);
-    SetTextureFilter(game.sprites.spritesheet, TEXTURE_FILTER_POINT);
     load_sprite_sources(&game);
     load_drop_images(&game);
 
@@ -1042,66 +1043,29 @@ int main (int argc, char *argv[])
         update_game(&game);
     //Drawing to 320x240 render texture
         BeginTextureMode(screen);
-            ClearBackground(BLANK);
+            ClearBackground(WHITE);
             for (int i = 0; i < ROWS; i++) {
                 for (int j = 0; j < COLS; j++) {
                     Map m = game.maps[0]; 
                     Tile m_entity = m.tiles[j][i];
-                    Rectangle dest = (Rectangle) {.x = (float)j * TILE_WIDTH, .y = (float)i * TILE_HEIGHT, .width = TILE_WIDTH, .height = TILE_HEIGHT};
+                    Rectangle dest = (Rectangle) {.x = j * TILE_WIDTH, .y = i * TILE_HEIGHT, .width = TILE_WIDTH, .height = TILE_HEIGHT};
+                    Rectangle source = game.sprites.source[m_entity.entity.type];
                     Vector2 dest_vec = (Vector2) {0,0};
-                    
-                    switch (m_entity.entity.type) {
-                        case EMPTY:
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
-                            break;
-                        case SHOP:
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[SHOP], dest, dest_vec, 0.0f, WHITE);
-                            break;
-                        case TREE: {
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
-                            float height_factor = m_entity.entity.health / 100.0f;
-                            float chop = 1.0f - height_factor;
-                            Rectangle source = game.sprites.source[TREE];
-                            source.y = source.y + (chop * SPRITE_SIZE);
-                            source.height =  height_factor * SPRITE_SIZE;
-                            dest.y = ((float) i * TILE_HEIGHT) + (chop * TILE_WIDTH);
-                            dest.height = height_factor * TILE_HEIGHT;
-                            
-                            DrawTexturePro(game.sprites.spritesheet, source, dest, dest_vec, 0.0f, WHITE);
-                            break;
-                        }
-                        case RUIN: {
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[RUIN], dest, dest_vec, 0.0f, WHITE);
-                            break;
-                        }
-                        case CLEAN_RUIN: {
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[CLEAN_RUIN], dest, dest_vec, 0.0f, WHITE);
-                            break;
-                        }
-                        case STUMP: {
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[STUMP], dest, dest_vec, 0.0f, WHITE);
-                            break;
-                        }
-                        case ROCK: {
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[ROCK], dest, dest_vec, 0.0f, WHITE);
-                            break;
-                        }
-                        case EMPTY_ROCK: {
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
-                            DrawTexturePro(game.sprites.spritesheet, game.sprites.source[EMPTY_ROCK], dest, dest_vec, 0.0f, WHITE);
-                            break;
-                        }
-                        default:
-                            //DrawRectangle(j * TILE_WIDTH, i * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT, BLACK);
-                            break;
-                    }
 
-                    if (game.debug_mode) DrawRectangleLinesEx((Rectangle){dest.x, dest.y, dest.width, dest.height}, 0.5f, P_WHITE);
+                    //draw a background for all tiles
+                    DrawTexturePro(game.sprites.spritesheet, game.sprites.source[GRASS], dest, dest_vec, 0.0f, WHITE);
+
+                    if (m_entity.entity.type == TREE) {
+                        float height_factor = m_entity.entity.health / 100.0f;
+                        float chop = 1.0f - height_factor;
+                        source.y = source.y + (chop * SPRITE_SIZE);
+                        source.height =  height_factor * SPRITE_SIZE;
+                        dest.y = ((float) i * TILE_HEIGHT) + (chop * TILE_WIDTH);
+                        dest.height = height_factor * TILE_HEIGHT;
+                    }
+                    DrawTexturePro(game.sprites.spritesheet, source, dest, dest_vec, 0.0f, WHITE);
+
+                    //if (game.debug_mode) DrawRectangleLinesEx((Rectangle){dest.x, dest.y, dest.width, dest.height}, 0.5f, P_WHITE);
                 }
             }
             
@@ -1121,14 +1085,15 @@ int main (int argc, char *argv[])
                 if (!q[i].active) {
                     continue;
                 }
-                DrawTexturePro(game.sprites.spritesheet, q[i].sprite_array[q[i].sprite_index], q[i].shape, (Vector2){0,0}, 0.0f, WHITE);
+                Rectangle src = q[i].sprite_array[q[i].sprite_index];
+                DrawTexturePro(game.sprites.spritesheet, src, q[i].shape, (Vector2){0,0}, 0.0f, WHITE);
+                //DrawRectangleLines(q[i].shape.x, q[i].shape.y, q[i].shape.width, q[i].shape.height, GREEN);
             }
-
         EndTextureMode();
 
         //Drawing to frame buffer
         BeginDrawing();
-            ClearBackground(BLANK);
+            ClearBackground(WHITE);
             DrawTexturePro(
                 screen.texture,
                 (Rectangle){0, 0, WIDTH, -HEIGHT},
