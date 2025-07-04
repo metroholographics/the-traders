@@ -18,18 +18,24 @@
 #define P_LIGHTOLIVE (Color) {167, 165,  81, 255}
 #define P_OLIVE      (Color) {130, 150,  75, 255}
 #define P_DARKOLIVE  (Color) { 93, 136,  82, 255}
-
 #define P_YELLOW     (Color) {217, 176,  46, 255}
 
 #define ROWS 10
 #define COLS 15
+#define WORLD_COLS 9
+#define WORLD_ROWS 6
+
 #define TILE_WIDTH (WIDTH / COLS)
 #define HALF_TILE_WIDTH (TILE_WIDTH * 0.5f)
 #define TILE_HEIGHT (HEIGHT / ROWS)
 #define HALF_TILE_HEIGHT (TILE_HEIGHT * 0.5f)
 #define GAME_TILE_WIDTH (G_WIDTH / COLS)
+#define HALF_GAME_TILE_WIDTH (GAME_TILE_WIDTH * 0.5f)
 #define GAME_TILE_HEIGHT (G_HEIGHT / ROWS)
+#define HALF_GAME_TILE_HEIGHT (GAME_TILE_HEIGHT * 0.5f)
+
 #define SPRITE_SIZE 32
+#define HALF_SPRITE_SIZE 16
 #define MAX_HOVER_TEXT_LEN 64
 #define FONT_SIZE 26
 #define FONT_SPACING 2
@@ -136,6 +142,7 @@ typedef struct map {
     Tile tiles[COLS][ROWS];
     Entity_Queue entity_queue;
     int biome;
+    bool walkable;
 } Map;
 
 typedef struct player_stats {
@@ -221,13 +228,19 @@ typedef struct physics_queue {
     int count;
 } Physics_Queue;
 
+typedef struct int_vec2 {
+    int x;
+    int y;
+} Int_Vec2;
+
 typedef struct game_state {
     Entity player;
     Player_Stats stats;
     int inventory_count[NUM_DROPS];
     Physics_Queue physics_queue;
     Job_Manager jobs;
-    Map maps[NUM_MAPS];
+    Int_Vec2 world_pos;
+    Map world[WORLD_ROWS][WORLD_COLS];
     Map* current_map;
     Sprites sprites;
     Hover_Text hover_text;
@@ -238,6 +251,7 @@ typedef struct game_state {
     bool debug_mode;
 } GameState;
 
+void generate_world(Map world[][WORLD_COLS]);
 Map empty_map(void);
 void reset_game(GameState* g);
 void create_entities(Entity* e);
@@ -277,4 +291,5 @@ bool check_job_complete(Job* j);
 void accept_job(Job_Manager* jm);
 void add_to_physics_queue(Physics_Object obj, Rectangle shape);
 void handle_physics_queue(Physics_Queue* queue);
+
 #endif
