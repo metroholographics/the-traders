@@ -138,50 +138,61 @@ Tile create_tile(Entity_Type current, Entity_Type previous, int x, int y)
     return (Tile) {.entity = c, .previous = p};
 }
 
+Map generate_biome_map(Biome_Type b)
+{
+    Map map = {0};
+    Biome j = game.biomes[b];
+    int count = j.count;
+    for (int y = 0; y < ROWS; y++) {
+        for (int x = 0; x < COLS; x++) {
+            if (x == 0 || y == 0 || x == COLS - 1 || y == ROWS - 1) {
+                map.tiles[x][y] = create_tile(j.default_tile, j.default_tile, x, y);
+                continue;
+            }
+            int rand = GetRandomValue(1, 100);
+            for (int i = 0; i < count; i++) {
+                if (rand <= j.chance[i]) {
+                    map.tiles[x][y] = j.tile_types[i];
+                    map.tiles[x][y].entity.pos[0] = x;
+                    map.tiles[x][y].entity.pos[1] = y;
+                    break;
+                }
+            }
+        }
+    }
+    map.walkable = true;
+    map.biome = JUNGLE;
+    map.entity_queue.queue[0] = NULL;
+    map.entity_queue.count = 0;
+    return map;
+}
+
 void generate_world(Map world[][WORLD_COLS])
 {
     for (int y = 0; y < WORLD_ROWS; y++) {
         for (int x = 0; x < WORLD_COLS; x++) {
-            world[y][x] = empty_map();
+            world[y][x] = generate_biome_map(JUNGLE); 
+            //world[y][x] = empty_map();
         }
     }
 }
 
-void reset_game(GameState* g)
+Biome create_jungle_biome()
 {
-    SetRandomSeed(time(NULL));
-    g->player = entities[PLAYER];
-    g->player.pos[0] = 5;
-    g->player.pos[1] = 5;
-    g->stats = (Player_Stats) {
-        .woodcut_dmg = 30,
-        .mine_dmg = 30
-    };
+    Biome b = {0};
 
-    g->physics_queue = (Physics_Queue) {0};
+    CREATE_BIOME_TILE(b, 0, RUIN, CLEAN_RUIN, 5);
+    CREATE_BIOME_TILE(b, 1, ROCK, EMPTY_ROCK, 10);
+    CREATE_BIOME_TILE(b, 2, TREE, STUMP, 25);
+    CREATE_BIOME_TILE(b, 3, EMPTY, EMPTY, 100);
 
-    g->jobs = (Job_Manager) {0};
-    g->jobs.sell_timer.max_time = SELL_TIMER_MAX;
-    g->jobs.sell_timer.min_time = SELL_TIMER_MIN;
+    b.default_tile = EMPTY;
 
-    generate_world(g->world);
+    return b;
+}
 
-    g->world[0][0] = empty_map();
-    g->world_pos = (Int_Vec2) {0,0};
-    g->current_map = &g->world[g->world_pos.y][g->world_pos.x];
-    g->current_map->tiles[5][3]  = create_tile(TREE, STUMP, 5, 3);
-    g->current_map->tiles[7][4]  = create_tile(RUIN, CLEAN_RUIN, 7, 4);
-    g->current_map->tiles[9][4]  = create_tile(RUIN, CLEAN_RUIN, 9, 4);
-    g->current_map->tiles[10][8] = create_tile(TREE, STUMP, 10, 8);
-    g->current_map->tiles[11][8] = create_tile(TREE, STUMP, 11, 8);
-    g->current_map->tiles[10][5] = create_tile(TREE, STUMP, 10, 5);
-    g->current_map->tiles[11][7] = create_tile(TREE, STUMP, 11, 7);
-    g->current_map->tiles[14][1] = create_tile(SHOP, EMPTY, 14, 1);
-    g->current_map->tiles[7][6]  = create_tile(ROCK, EMPTY_ROCK, 7, 6);
-    g->selected_tile = NULL;
-    g->debug_mode = false;
-    g->hover_text = (Hover_Text) {0};
-
+void set_ui_elements(GameState* g)
+{
     g->ui.inventory = (Inventory) {0};
     g->ui.inventory.space = (Rectangle) {
         .x = 0,
@@ -245,6 +256,46 @@ void reset_game(GameState* g)
         .y = g->ui.active_job.space.y + INV_INITIAL_OFFSET
     };
     g->ui.shapes[JOB_ACTIVE] = g->ui.active_job.space;
+}
+
+void reset_game(GameState* g)
+{
+    SetRandomSeed(time(NULL));
+
+    g->biomes[JUNGLE] = create_jungle_biome();
+
+    g->player = entities[PLAYER];
+    g->player.pos[0] = 5;
+    g->player.pos[1] = 5;
+    g->stats = (Player_Stats) {
+        .woodcut_dmg = 30,
+        .mine_dmg = 30
+    };
+
+    g->physics_queue = (Physics_Queue) {0};
+
+    g->jobs = (Job_Manager) {0};
+    g->jobs.sell_timer.max_time = SELL_TIMER_MAX;
+    g->jobs.sell_timer.min_time = SELL_TIMER_MIN;
+
+    generate_world(g->world);
+
+    g->world_pos = (Int_Vec2) {0,0};
+    g->current_map = &g->world[g->world_pos.y][g->world_pos.x];
+    // g->current_map->tiles[5][3]  = create_tile(TREE, STUMP, 5, 3);
+    // g->current_map->tiles[7][4]  = create_tile(RUIN, CLEAN_RUIN, 7, 4);
+    // g->current_map->tiles[9][4]  = create_tile(RUIN, CLEAN_RUIN, 9, 4);
+    // g->current_map->tiles[10][8] = create_tile(TREE, STUMP, 10, 8);
+    // g->current_map->tiles[11][8] = create_tile(TREE, STUMP, 11, 8);
+    // g->current_map->tiles[10][5] = create_tile(TREE, STUMP, 10, 5);
+    // g->current_map->tiles[11][7] = create_tile(TREE, STUMP, 11, 7);
+    g->current_map->tiles[13][1] = create_tile(SHOP, EMPTY, 13, 1);
+    //g->current_map->tiles[7][6]  = create_tile(ROCK, EMPTY_ROCK, 7, 6);
+    g->selected_tile = NULL;
+    g->debug_mode = false;
+    g->hover_text = (Hover_Text) {0};
+
+    set_ui_elements(g);
 }
 
 void set_entity_action_text(char* b, Entity e)
@@ -424,12 +475,41 @@ void handle_input(Entity* p)
             break;
     }
 
-    if (new_x >= COLS) {
-        new_x = 0;
-        game.world_pos.x++;
-        if (game.world_pos.x >= WORLD_COLS) game.world_pos.x--; //todo: bounds checking on rows
-        game.current_map = &game.world[game.world_pos.y][game.world_pos.x];
+    { //::open for map movement ~~~
+        if (new_x >= COLS) {
+            game.world_pos.x++;
+            if (game.world_pos.x < WORLD_COLS) {
+                new_x = 0;
+            } else {
+                game.world_pos.x--;
+            }
+        } else if (new_x < 0) {
+            game.world_pos.x--;
+            if (game.world_pos.x >= 0) {
+                new_x = COLS - 1;
+            } else {
+                game.world_pos.x++;
+            }
+        }
+
+        if (new_y >= ROWS) {
+            game.world_pos.y++;
+            if (game.world_pos.y < WORLD_ROWS) {
+                new_y = 0;
+            } else {
+                game.world_pos.y--;
+            }
+        } else if (new_y < 0) {
+            game.world_pos.y--;
+            if (game.world_pos.y >= 0) {
+                new_y = ROWS - 1;
+            } else {
+                game.world_pos.y++;
+            }
+        }
     }
+
+    game.current_map = &game.world[game.world_pos.y][game.world_pos.x];
 
     if (tile_in_bounds(new_x, new_y)) {
         Entity target = game.current_map->tiles[new_x][new_y].entity;

@@ -55,6 +55,14 @@
 #define SELL_TIMER_MIN 0.4f
 #define SELL_TIME_FACTOR 0.8f
 
+
+#define CREATE_BIOME_TILE(b, index, e1, e2, rarity) \
+    do { \
+        (b).tile_types[(index)] = create_tile((e1), (e2), 0, 0); \
+        (b).chance[(index)] = (rarity); \
+        (b).count++; \
+    } while(0)
+
 typedef enum {
     EMPTY = 0,
     PLAYER,
@@ -101,6 +109,12 @@ typedef enum {
     NUM_UI_ELEMENTS,
 } UI_ELEMENTS;
 
+typedef enum {
+    NO_BIOME = 0,
+    JUNGLE,
+    NUM_BIOME_TYPES
+} Biome_Type;
+
 typedef struct Timer {
     float time;
     float trigger_time;
@@ -138,10 +152,17 @@ typedef struct Sprite {
     Rectangle drop_source[NUM_DROPS];
 } Sprites;
 
+typedef struct biome {
+    Tile tile_types[10];
+    int chance[10];
+    int count;
+    Entity_Type default_tile;
+} Biome;
+
 typedef struct map {
     Tile tiles[COLS][ROWS];
     Entity_Queue entity_queue;
-    int biome;
+    Biome_Type biome;
     bool walkable;
 } Map;
 
@@ -234,6 +255,7 @@ typedef struct int_vec2 {
 } Int_Vec2;
 
 typedef struct game_state {
+    Biome biomes[NUM_BIOME_TYPES];
     Entity player;
     Player_Stats stats;
     int inventory_count[NUM_DROPS];
@@ -251,8 +273,11 @@ typedef struct game_state {
     bool debug_mode;
 } GameState;
 
+void set_ui_elements(GameState* g);
 void generate_world(Map world[][WORLD_COLS]);
 Map empty_map(void);
+Map generate_biome_map(Biome_Type b);
+Biome create_jungle_biome(void);
 void reset_game(GameState* g);
 void create_entities(Entity* e);
 void update_game(GameState* g);
