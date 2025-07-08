@@ -175,24 +175,48 @@ void generate_world(Map world[][WORLD_COLS])
             //world[y][x] = empty_map();
         }
     }
+
+    /*
+        # # # # * . . . .
+        # # # # * . . . .
+        * # # # # * * . .
+        . * # # # # # # *
+        . . * # # # # # #
+        . . . * # # # # *
+    */
+    world[0][5].walkable = false;
+    world[0][6].walkable = false;
+    world[0][7].walkable = false;
+    world[0][8].walkable = false;
+    world[1][5].walkable = false;
+    world[1][6].walkable = false;
+    world[1][7].walkable = false;
+    world[1][8].walkable = false;
+    world[2][7].walkable = false;
+    world[2][8].walkable = false;
+    world[3][0].walkable = false;
+    world[4][0].walkable = false;
+    world[4][1].walkable = false;
+    world[5][0].walkable = false;
+    world[5][1].walkable = false;
+    world[5][2].walkable = false;
 }
 
 Biome create_jungle_biome()
 {
     Biome b = {0};
-
     CREATE_BIOME_TILE(b, 0, RUIN, CLEAN_RUIN, 5);
     CREATE_BIOME_TILE(b, 1, ROCK, EMPTY_ROCK, 10);
     CREATE_BIOME_TILE(b, 2, TREE, STUMP, 25);
     CREATE_BIOME_TILE(b, 3, EMPTY, EMPTY, 100);
 
     b.default_tile = EMPTY;
-
     return b;
 }
 
 void set_ui_elements(GameState* g)
 {
+    g->ui.showing = true;
     g->ui.inventory = (Inventory) {0};
     g->ui.inventory.space = (Rectangle) {
         .x = 0,
@@ -278,19 +302,22 @@ void reset_game(GameState* g)
     g->jobs.sell_timer.max_time = SELL_TIMER_MAX;
     g->jobs.sell_timer.min_time = SELL_TIMER_MIN;
 
-    generate_world(g->world);
 
+
+    generate_world(g->world);
     g->world_pos = (Int_Vec2) {0,0};
     g->current_map = &g->world[g->world_pos.y][g->world_pos.x];
-    // g->current_map->tiles[5][3]  = create_tile(TREE, STUMP, 5, 3);
-    // g->current_map->tiles[7][4]  = create_tile(RUIN, CLEAN_RUIN, 7, 4);
-    // g->current_map->tiles[9][4]  = create_tile(RUIN, CLEAN_RUIN, 9, 4);
-    // g->current_map->tiles[10][8] = create_tile(TREE, STUMP, 10, 8);
-    // g->current_map->tiles[11][8] = create_tile(TREE, STUMP, 11, 8);
-    // g->current_map->tiles[10][5] = create_tile(TREE, STUMP, 10, 5);
-    // g->current_map->tiles[11][7] = create_tile(TREE, STUMP, 11, 7);
+
+    g->world[0][0].tiles[13][1] = create_tile(SHOP, EMPTY, 13, 1);
+    g->world[0][3].tiles[7][4]  = create_tile(SHOP, EMPTY,  7, 4);
+    g->world[2][0].tiles[12][2] = create_tile(SHOP, EMPTY, 12, 2);
+    g->world[3][3].tiles[3][8]  = create_tile(SHOP, EMPTY,  3, 8);
+    g->world[5][5].tiles[6][3]  = create_tile(SHOP, EMPTY,  6, 3);
+    g->world[4][8].tiles[13][7] = create_tile(SHOP, EMPTY, 13, 7);
+
+
     g->current_map->tiles[13][1] = create_tile(SHOP, EMPTY, 13, 1);
-    //g->current_map->tiles[7][6]  = create_tile(ROCK, EMPTY_ROCK, 7, 6);
+
     g->selected_tile = NULL;
     g->debug_mode = false;
     g->hover_text = (Hover_Text) {0};
@@ -386,6 +413,9 @@ bool mouse_in_rec(Vector2 mouse_pos, Rectangle rec) {
 }
 
 bool handle_ui_clicks(Vector2 mouse_pos, GameState* g) {
+    
+    bool showing = game.ui.showing;
+
     int i = 0;
     Job_State job_status = g->jobs.current_job.status;
     for (i = 0; i < NUM_UI_ELEMENTS; i++) {
@@ -395,20 +425,20 @@ bool handle_ui_clicks(Vector2 mouse_pos, GameState* g) {
     }
     switch (i) {
         case INVENTORY:
-            return true;
+            if (showing) return true;
             break;
         case JOB_OFFER:
             if (job_status == OFFERED) return true;
             break;
         case JOB_ACCEPT_BUTTON:
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && job_status == OFFERED) {
+            if (showing && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && job_status == OFFERED) {
                 accept_job(&g->jobs);
                 set_hover_text(&g->hover_text,"Got a new payload...", 2.0f);
                 return true;
             }
             break;
         case JOB_ACTIVE:
-            if (job_status == ACCEPTED) return true;
+            if (job_status == ACCEPTED && showing) return true;
             break;
         case NUM_UI_ELEMENTS:
             break;
@@ -420,16 +450,14 @@ bool handle_ui_clicks(Vector2 mouse_pos, GameState* g) {
 void handle_input(Entity* p)
 {
     //Mouse-Handling
-    //check if hovering over UI element, and then handle accordingly
     Vector2 mouse_pos = GetMousePosition();
-
+    //check if hovering over UI element, and then handle accordingly
     bool ui_clicked = handle_ui_clicks(mouse_pos, &game);
     if (!ui_clicked) {
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             Tile* selected = get_selected_tile(game.current_map);
             if (game.selected_tile == selected) {
                 register_action(p, game.selected_tile);
-                
             } else {
                 game.selected_tile = selected;
                 char buffer[MAX_HOVER_TEXT_LEN];
@@ -471,53 +499,65 @@ void handle_input(Entity* p)
             p->action = NO_ACTION;
             new_y += 1;
             break;
+        case KEY_I:
+            game.ui.showing = !game.ui.showing;
+            break;
         default:
             break;
     }
 
+    int world_x = game.world_pos.x;
+    int world_y = game.world_pos.y;
     { //::open for map movement ~~~
+        //::todo -- copy and modify the copy of the world pos, then update
         if (new_x >= COLS) {
-            game.world_pos.x++;
-            if (game.world_pos.x < WORLD_COLS) {
+            world_x++;
+            if (world_x < WORLD_COLS && game.world[world_y][world_x].walkable) {
                 new_x = 0;
             } else {
-                game.world_pos.x--;
+                new_x = COLS - 1;
+                world_x--;
             }
         } else if (new_x < 0) {
-            game.world_pos.x--;
-            if (game.world_pos.x >= 0) {
+            world_x--;
+            if (world_x >= 0 && game.world[world_y][world_x].walkable) {
                 new_x = COLS - 1;
             } else {
-                game.world_pos.x++;
+                new_x = 0;
+                world_x++;
             }
         }
 
         if (new_y >= ROWS) {
-            game.world_pos.y++;
-            if (game.world_pos.y < WORLD_ROWS) {
+            world_y++;
+            if (world_y < WORLD_ROWS && game.world[world_y][world_x].walkable) {
                 new_y = 0;
             } else {
-                game.world_pos.y--;
+                new_y = ROWS - 1;
+                world_y--;
             }
         } else if (new_y < 0) {
-            game.world_pos.y--;
-            if (game.world_pos.y >= 0) {
+            world_y--;
+            if (world_y >= 0 && game.world[world_y][world_x].walkable) {
                 new_y = ROWS - 1;
             } else {
-                game.world_pos.y++;
+                new_y = 0;
+                world_y++;
             }
         }
     }
 
-    game.current_map = &game.world[game.world_pos.y][game.world_pos.x];
-
-    if (tile_in_bounds(new_x, new_y)) {
-        Entity target = game.current_map->tiles[new_x][new_y].entity;
-        if (target.walkable) {
-            p->pos[0] = new_x;
-            p->pos[1] = new_y;
-        }
+    if (game.world[world_y][world_x].walkable) {
+        game.world_pos.x = world_x;
+        game.world_pos.y = world_y;
+        game.current_map = &game.world[game.world_pos.y][game.world_pos.x];
     }
+
+    bool target_walkable   = game.current_map->tiles[new_x][new_y].entity.walkable;
+    if (target_walkable) {
+        p->pos[0] = new_x;
+        p->pos[1] = new_y;
+    } 
 }
 
 void register_action(Entity* p, Tile* target)
@@ -847,6 +887,7 @@ void grow_entity(Map* m, Entity* e, int index)
 
 void update_game(GameState* g)
 {
+    //::debug behaviour
     if (g->debug_mode) {
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             Tile* selected = get_selected_tile(g->current_map);
@@ -864,7 +905,6 @@ void update_game(GameState* g)
         create_job(&g->jobs);
         g->jobs.create_job = false;
     }
-
     if (g->jobs.current_job.status == ACCEPTED) {
         update_job_requirements(g, &g->jobs.current_job);
     }
@@ -1051,6 +1091,7 @@ void load_drop_images(GameState* g)
 
 void update_ui_elements(GameState* g)
 {
+
     if (g->jobs.current_job.status == OFFERED) {
         g->ui.offer.accept_percent = (JOB_ACCEPT_TIME - g->jobs.timer.time) / JOB_ACCEPT_TIME; 
     } else {
@@ -1064,22 +1105,24 @@ void draw_display_ui(GameState* g)
     Texture2D sheet = g->sprites.spritesheet;
     Rectangle* drop_images = g->sprites.drop_source; 
 
-    Inventory inventory = g->ui.inventory;
-    Rectangle inv_shape = inventory.slot_size;
-    DrawRectangleRec(g->ui.inventory.space, P_BLACK);
-    for (int i = 0; i < INVENTORY_SLOTS; i++) {
-        Drop d = inventory.slots[i];
-        Rectangle dest = (Rectangle) {
-            .x = inv_shape.x,
-            .y = inv_shape.y,
-            .width = HALF_GAME_TILE_WIDTH,
-            .height = HALF_GAME_TILE_HEIGHT,
-        };
-        DrawTexturePro(sheet, drop_images[d], dest, origin, 0.0f, P_WHITE);
-        inv_shape.x += inv_shape.width;
-        if ((i + 1) % 4 == 0) {
-            inv_shape.y += inv_shape.height;
-            inv_shape.x = inventory.slot_size.x;
+    if (g->ui.showing) {
+        Inventory inventory = g->ui.inventory;
+        Rectangle inv_shape = inventory.slot_size;
+        DrawRectangleRec(g->ui.inventory.space, P_BLACK);
+        for (int i = 0; i < INVENTORY_SLOTS; i++) {
+            Drop d = inventory.slots[i];
+            Rectangle dest = (Rectangle) {
+                .x = inv_shape.x,
+                .y = inv_shape.y,
+                .width = HALF_GAME_TILE_WIDTH,
+                .height = HALF_GAME_TILE_HEIGHT,
+            };
+            DrawTexturePro(sheet, drop_images[d], dest, origin, 0.0f, P_WHITE);
+            inv_shape.x += inv_shape.width;
+            if ((i + 1) % 4 == 0) {
+                inv_shape.y += inv_shape.height;
+                inv_shape.x = inventory.slot_size.x;
+            }
         }
     }
 
@@ -1109,30 +1152,32 @@ void draw_display_ui(GameState* g)
         DrawTextEx(g->ui_font, "ACCEPT?",g->ui.offer.accept_button.accept_text_pos, 32, 2, P_WHITE);
     }
 
-    if (current_job.status == ACCEPTED) {
-        DrawRectangleRec(g->ui.active_job.space, P_BLACK);
-        Rectangle job_req_size = g->ui.active_job.slot_size;
-        DrawTextEx(g->ui_font, "Payout: $0000.00",g->ui.active_job.reward_pos, 30, 2, P_YELLOW);
+    if (g->ui.showing) {
+        if (current_job.status == ACCEPTED) {
+            DrawRectangleRec(g->ui.active_job.space, P_BLACK);
+            Rectangle job_req_size = g->ui.active_job.slot_size;
+            DrawTextEx(g->ui_font, "Payout: $0000.00",g->ui.active_job.reward_pos, 30, 2, P_YELLOW);
 
-        for (int i = 0; i < 3; i++) {
-            Drop d = current_job.requirements[i];
-            if (d != NONE) {
-                //text
-                char buffer[10];
-                snprintf(buffer, 10, "%0d/%0d", current_job.in_inventory[i], current_job.amount[i]);
-                Vector2 pos = get_centered_text_rec(g->ui_font, buffer, job_req_size, 28, 2);
-                pos.y += (0.6f * job_req_size.height);
-                Color t_col = (current_job.complete[i]) ? P_LIGHTGREEN : P_WHITE;
-                DrawTextEx(g->ui_font,buffer, pos, 28, 2, t_col);
-                //drop
-                Rectangle dest = {
-                    .x = job_req_size.x,
-                    .y = job_req_size.y,
-                    .width = 0.75f * GAME_TILE_WIDTH,
-                    .height = 0.75f * GAME_TILE_HEIGHT,
-                };
-                DrawTexturePro(sheet, drop_images[d], dest, origin, 0.0f, P_WHITE);
-                job_req_size.x += job_req_size.width + INV_INITIAL_OFFSET;
+            for (int i = 0; i < 3; i++) {
+                Drop d = current_job.requirements[i];
+                if (d != NONE) {
+                    //text
+                    char buffer[10];
+                    snprintf(buffer, 10, "%0d/%0d", current_job.in_inventory[i], current_job.amount[i]);
+                    Vector2 pos = get_centered_text_rec(g->ui_font, buffer, job_req_size, 28, 2);
+                    pos.y += (0.6f * job_req_size.height);
+                    Color t_col = (current_job.complete[i]) ? P_LIGHTGREEN : P_WHITE;
+                    DrawTextEx(g->ui_font,buffer, pos, 28, 2, t_col);
+                    //drop
+                    Rectangle dest = {
+                        .x = job_req_size.x,
+                        .y = job_req_size.y,
+                        .width = 0.75f * GAME_TILE_WIDTH,
+                        .height = 0.75f * GAME_TILE_HEIGHT,
+                    };
+                    DrawTexturePro(sheet, drop_images[d], dest, origin, 0.0f, P_WHITE);
+                    job_req_size.x += job_req_size.width + INV_INITIAL_OFFSET;
+                }
             }
         }
     }
@@ -1239,6 +1284,9 @@ int main (int argc, char *argv[])
             draw_display_ui(&game);
             if (game.debug_mode) {
                 DrawTextEx(game.game_font, "Debug", (Vector2) {10, 10}, 48, FONT_SPACING, P_RED);
+                char buffer[15];
+                snprintf(buffer, 15, "world_pos: %d,%d", game.world_pos.y, game.world_pos.x);
+                DrawTextEx(game.game_font, buffer, (Vector2) {500, 10}, 48, FONT_SPACING, P_RED);
                 DrawFPS(100, 10);
             }
             if (game.hover_text.active) {

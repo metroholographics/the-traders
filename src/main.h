@@ -55,7 +55,6 @@
 #define SELL_TIMER_MIN 0.4f
 #define SELL_TIME_FACTOR 0.8f
 
-
 #define CREATE_BIOME_TILE(b, index, e1, e2, rarity) \
     do { \
         (b).tile_types[(index)] = create_tile((e1), (e2), 0, 0); \
@@ -211,6 +210,7 @@ typedef struct ui {
     Job_Offer offer;
     Accepted_Job active_job;
     Rectangle shapes[NUM_UI_ELEMENTS];
+    bool showing;
 } UI;
 
 typedef struct job {
